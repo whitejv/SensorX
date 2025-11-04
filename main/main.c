@@ -10,6 +10,10 @@
 #include "watchdog.h"       // From sensor_system component
 #include "error_recovery.h" // From sensor_system component
 #include "wifi_manager.h"   // From sensor_system component
+#include "i2c_manager.h"    // From sensor_system component
+#include "mqtt_manager.h"   // From sensor_system component
+#include "sensor_acquisition.h" // From sensor_system component
+#include "mqtt_publisher.h"     // From sensor_system component
 
 static const char *TAG = "MAIN";
 
@@ -87,7 +91,41 @@ void app_main(void) {
         }
     }
 
-    // 4. Create the system information task
+    // 4. Initialize I2C Manager (non-critical - continue if fails)
+    ret = i2c_manager_init();
+    if (ret != ESP_OK) {
+        error_report(ERROR_I2C_TIMEOUT, ERROR_SEVERITY_ERROR, "app_main", NULL);
+        ESP_LOGE(TAG, "Failed to initialize I2C manager: %s", esp_err_to_name(ret));
+        // Continue anyway - some sensors may not be critical
+    } else {
+        ESP_LOGI(TAG, "I2C manager initialized successfully");
+    }
+
+    // 5. Initialize MQTT Manager (after WiFi, non-critical - continue if fails)
+    // Note: MQTT init requires WiFi to be connected, so we'll initialize it
+    // after WiFi connection is established
+    if (wifi_manager_is_connected()) {
+        ret = mqtt_manager_init();
+        if (ret != ESP_OK) {
+            error_report(ERROR_NONE, ERROR_SEVERITY_WARNING, "app_main", NULL);
+            ESP_LOGW(TAG, "Failed to initialize MQTT manager: %s", esp_err_to_name(ret));
+            // Continue anyway - MQTT is not critical for basic operation
+        } else {
+            ESP_LOGI(TAG, "MQTT manager initialized successfully");
+            // Try to connect to MQTT broker
+            ret = mqtt_manager_connect();
+            if (ret != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to connect to MQTT broker: %s", esp_err_to_name(ret));
+                error_report(ERROR_NONE, ERROR_SEVERITY_WARNING, "app_main", NULL);
+            } else {
+                ESP_LOGI(TAG, "MQTT connection initiated");
+            }
+        }
+    } else {
+        ESP_LOGI(TAG, "WiFi not connected yet, MQTT initialization deferred");
+    }
+
+    // 6. Create the system information task
     BaseType_t xResult = xTaskCreate(
         vSystemInfoTask,              // Task function
         "SystemInfo",                 // Task name
@@ -104,11 +142,11 @@ void app_main(void) {
         ESP_LOGW(TAG, "WARNING: Failed to create system information task");
     }
 
-    // 5. Create the system monitoring task
+    // 7. Create the system monitoring task
     xResult = xTaskCreate(
         vSystemMonitorTask,           // Task function
         "SysMonitor",                 // Task name
-        TASK_STACK_SIZE_BACKGROUND,   // Stack size from config.h
+        TASK_STACK_SIZE_FIXED_FREQ,   // Increased stack size for I2C scanning and string operations
         NULL,                         // Parameters
         TASK_PRIORITY_BACKGROUND,     // Priority from config.h
         &xSystemMonitorTaskHandle     // Task handle
@@ -124,7 +162,7 @@ void app_main(void) {
         abort();
     }
 
-    // 6. Create the heartbeat task
+    // 8. Create the heartbeat task
     xResult = xTaskCreate(
         vHeartbeatTask,               // Task function
         "Heartbeat",                  // Task name
@@ -141,6 +179,46 @@ void app_main(void) {
     } else {
         error_report(ERROR_TASK_CREATION, ERROR_SEVERITY_WARNING, "app_main", NULL);
         ESP_LOGW(TAG, "WARNING: Failed to create heartbeat task");
+    }
+
+    // 9. Create the sensor acquisition task (critical priority)
+    xResult = xTaskCreate(
+        vSensorAcquisitionTask,         // Task function
+        "SensorAcq",                     // Task name
+        TASK_STACK_SIZE_CRITICAL,        // Stack size from config.h
+        NULL,                            // Parameters
+        TASK_PRIORITY_CRITICAL,          // Priority from config.h (highest)
+        &xSensorAcquisitionTaskHandle    // Task handle
+    );
+
+    if (xResult == pdPASS) {
+        ESP_LOGI(TAG, "Sensor acquisition task created successfully");
+        // Register with watchdog after creation
+        watchdog_register_task(xSensorAcquisitionTaskHandle, "SensorAcq", SENSOR_ACQUISITION_INTERVAL + 200);
+    } else {
+        error_report(ERROR_TASK_CREATION, ERROR_SEVERITY_FATAL, "app_main", NULL);
+        ESP_LOGE(TAG, "ERROR: Failed to create sensor acquisition task!");
+        abort();
+    }
+
+    // 10. Create the MQTT publisher task
+    xResult = xTaskCreate(
+        vMqttPublisherTask,              // Task function
+        "MqttPub",                       // Task name
+        TASK_STACK_SIZE_FIXED_FREQ,      // Stack size from config.h
+        NULL,                            // Parameters
+        TASK_PRIORITY_FIXED_FREQ,        // Priority from config.h
+        &xMqttPublisherTaskHandle        // Task handle
+    );
+
+    if (xResult == pdPASS) {
+        ESP_LOGI(TAG, "MQTT publisher task created successfully");
+        // Register with watchdog after creation
+        watchdog_register_task(xMqttPublisherTaskHandle, "MqttPub", MQTT_PUBLISH_INTERVAL + 1000);
+    } else {
+        error_report(ERROR_TASK_CREATION, ERROR_SEVERITY_WARNING, "app_main", NULL);
+        ESP_LOGW(TAG, "WARNING: Failed to create MQTT publisher task");
+        // Continue anyway - MQTT is not critical for basic operation
     }
 
     // FreeRTOS scheduler is already running in ESP-IDF

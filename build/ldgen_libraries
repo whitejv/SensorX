@@ -159,5 +159,6 @@
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/wifi_provisioning/libwifi_provisioning.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/json/libjson.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/sensor_system/libsensor_system.a
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/mqtt/libmqtt.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/main/libmain.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/sensor_system/libsensor_system.a

@@ -29,7 +29,7 @@
 // System timing constants (in milliseconds)
 #define SYSTEM_LOOP_INTERVAL         1000  // Main loop interval
 #define SENSOR_ACQUISITION_INTERVAL  100   // Sensor reading interval
-#define WATCHDOG_FEED_INTERVAL       50    // Watchdog feeding interval
+#define WATCHDOG_FEED_INTERVAL       100   // Watchdog feeding interval (reduced CPU load)
 #define MQTT_PUBLISH_INTERVAL        1000  // MQTT publishing interval
 #define SD_LOG_FLUSH_INTERVAL        2000  // SD card flush interval (2-5 sec range)
 #define SYSTEM_STATUS_INTERVAL       30000 // System status reporting
@@ -46,7 +46,7 @@
 #define ADC_READ_TIMEOUT             500   // ADC conversion timeout
 
 // I2C configuration
-#define I2C_CLOCK_SPEED              50000 // 50kHz for reliability
+#define I2C_CLOCK_SPEED              100000 // 100kHz (I2C Standard-mode, optimal default)
 #define I2C_TIMEOUT_MS               10    // 10ms timeout
 
 // System limits
@@ -71,5 +71,15 @@
 #define WIFI_PASSWORD                 "6jhz7ai7pqy5"        // Replace with your WiFi password
 #define WIFI_AUTO_CONNECT              1                    // Set to 1 to auto-connect on startup, 0 to connect manually
 #define WIFI_HOSTNAME                  "SensorX-ESP32"      // Hostname for WiFi (max ~32 chars, no spaces/special chars)
+
+// MQTT configuration
+#define MQTT_PROD_SERVER_IP            "192.168.1.250"     // Production MQTT broker IP
+#define MQTT_DEV_SERVER_IP              "192.168.1.249"     // Development MQTT broker IP
+#define MQTT_PORT                      1883                 // MQTT broker port
+#define MQTT_CLIENT_ID                 WIFI_HOSTNAME       // Use hostname as client ID
+#define MQTT_TOPIC_BINARY               "sensor/binary"     // Base topic for binary messages
+#define MQTT_TOPIC_JSON                 "sensor/json"       // Base topic for JSON messages
+#define MQTT_AUTO_RECONNECT             1                   // Auto-reconnect on disconnect (1=enabled, 0=disabled)
+#define MQTT_CONNECT_TIMEOUT_MS         5000                // Connection timeout in milliseconds
 
 #endif /* CONFIG_H */

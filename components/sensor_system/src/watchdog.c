@@ -96,7 +96,7 @@ BaseType_t watchdog_start_task(void) {
     BaseType_t result = xTaskCreate(
         vWatchdogTask,
         "WatchdogTask",
-        TASK_STACK_SIZE_CRITICAL,
+        TASK_STACK_SIZE_BACKGROUND,
         NULL,
         TASK_PRIORITY_CRITICAL,
         &watchdog_task_handle

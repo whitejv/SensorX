@@ -25,6 +25,11 @@
 #include "error_recovery.h"
 #include "types.h"
 
+// Forward declarations to avoid circular dependency
+bool mqtt_manager_is_connected(void);
+esp_err_t mqtt_manager_init(void);
+esp_err_t mqtt_manager_connect(void);
+
 static const char *TAG = "WIFI_MANAGER";
 
 // WiFi event bits
@@ -332,6 +337,24 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
         connection_start_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
         
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        
+        // Initialize and connect MQTT now that WiFi is connected
+        if (!mqtt_manager_is_connected()) {
+            esp_err_t ret = mqtt_manager_init();
+            if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "MQTT manager initialized after WiFi connection");
+                ret = mqtt_manager_connect();
+                if (ret == ESP_OK) {
+                    ESP_LOGI(TAG, "MQTT connection initiated after WiFi connection");
+                } else {
+                    ESP_LOGW(TAG, "Failed to connect MQTT after WiFi connection: %s", 
+                             esp_err_to_name(ret));
+                }
+            } else {
+                ESP_LOGW(TAG, "Failed to initialize MQTT after WiFi connection: %s",
+                         esp_err_to_name(ret));
+            }
+        }
     }
 }
 

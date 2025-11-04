@@ -16,6 +16,10 @@ extern TaskHandle_t xHeartbeatTaskHandle;
 extern TaskHandle_t xSystemInfoTaskHandle;
 extern TaskHandle_t xSystemMonitorTaskHandle;
 
+// Task handles for sensor acquisition and MQTT publishing
+extern TaskHandle_t xSensorAcquisitionTaskHandle;
+extern TaskHandle_t xMqttPublisherTaskHandle;
+
 // Function declarations
 void vHeartbeatTask(void *pvParameters);
 void vSystemInfoTask(void *pvParameters);

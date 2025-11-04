@@ -26,6 +26,8 @@
 #include "watchdog.h"
 #include "error_recovery.h"
 #include "wifi_manager.h"
+#include "mqtt_manager.h"
+#include "i2c_manager.h"
 
 static const char *TAG = "SYSTEM_INIT";
 
@@ -33,6 +35,10 @@ static const char *TAG = "SYSTEM_INIT";
 TaskHandle_t xHeartbeatTaskHandle = NULL;
 TaskHandle_t xSystemInfoTaskHandle = NULL;
 TaskHandle_t xSystemMonitorTaskHandle = NULL;
+
+// Task handles for sensor acquisition and MQTT publishing
+TaskHandle_t xSensorAcquisitionTaskHandle = NULL;
+TaskHandle_t xMqttPublisherTaskHandle = NULL;
 
 /*
  * Heartbeat Task
@@ -246,6 +252,94 @@ void vSystemMonitorTask(void *pvParameters) {
                     break;
             }
             ESP_LOGI(TAG, "WiFi: %s", status_str);
+        }
+
+        // Get MQTT status
+        MQTTStatus_t mqtt_status = mqtt_manager_get_status();
+        bool mqtt_connected = mqtt_manager_is_connected();
+        
+        if (mqtt_connected) {
+            char mqtt_ip[16];
+            MQTTStats_t mqtt_stats;
+            mqtt_manager_get_stats(&mqtt_stats);
+            
+            if (mqtt_manager_get_broker_ip(mqtt_ip, sizeof(mqtt_ip)) == ESP_OK) {
+                ESP_LOGI(TAG, "MQTT: Connected | Broker: %s (%s) | Pub: %lu/%lu (ok/fail)",
+                         mqtt_ip, mqtt_stats.connectedToProd ? "PROD" : "DEV",
+                         mqtt_stats.publishSuccess, mqtt_stats.publishFailures);
+            } else {
+                ESP_LOGI(TAG, "MQTT: Connected | Pub: %lu/%lu (ok/fail)",
+                         mqtt_stats.publishSuccess, mqtt_stats.publishFailures);
+            }
+        } else {
+            const char* mqtt_status_str = "Unknown";
+            switch (mqtt_status) {
+                case MQTT_STATUS_DISCONNECTED: mqtt_status_str = "Disconnected"; break;
+                case MQTT_STATUS_CONNECTING: mqtt_status_str = "Connecting"; break;
+                case MQTT_STATUS_RECONNECTING: mqtt_status_str = "Reconnecting"; break;
+                case MQTT_STATUS_ERROR: mqtt_status_str = "Error"; break;
+                default: mqtt_status_str = "Unknown"; break;
+            }
+            ESP_LOGI(TAG, "MQTT: %s", mqtt_status_str);
+        }
+
+        // Get I2C status (cache results to avoid scanning every cycle)
+        static uint8_t cached_i2c_addresses[16] = {0};
+        static size_t cached_device_count = 0;
+        static uint32_t last_i2c_scan_time = 0;
+        static bool i2c_scan_complete = false;
+        
+        uint32_t current_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
+        // Scan I2C devices every 60 seconds
+        uint32_t scan_interval = 60000;  // 60 seconds
+        bool should_scan = !i2c_scan_complete || 
+                          (current_time - last_i2c_scan_time > scan_interval);
+        
+        if (i2c_manager_is_initialized()) {
+            if (should_scan) {
+                esp_err_t scan_result = i2c_manager_scan_devices(cached_i2c_addresses, 
+                                                                  sizeof(cached_i2c_addresses), 
+                                                                  &cached_device_count);
+                if (scan_result == ESP_OK) {
+                    last_i2c_scan_time = current_time;
+                    i2c_scan_complete = true;
+                }
+            }
+            
+            // Display cached results
+            if (cached_device_count > 0) {
+                // Build address string more efficiently to reduce stack usage
+                char addr_str[64] = "";
+                char *ptr = addr_str;
+                size_t remaining = sizeof(addr_str) - 1;
+                
+                for (size_t i = 0; i < cached_device_count && remaining > 8; i++) {
+                    if (i > 0) {
+                        int written = snprintf(ptr, remaining, ", ");
+                        if (written > 0 && written < (int)remaining) {
+                            ptr += written;
+                            remaining -= written;
+                        }
+                    }
+                    int written = snprintf(ptr, remaining, "0x%02X", cached_i2c_addresses[i]);
+                    if (written > 0 && written < (int)remaining) {
+                        ptr += written;
+                        remaining -= written;
+                    } else {
+                        break;  // Not enough space
+                    }
+                }
+                ESP_LOGI(TAG, "I2C: Initialized | Devices: %zu [%s]", cached_device_count, addr_str);
+            } else if (i2c_scan_complete) {
+                ESP_LOGI(TAG, "I2C: Initialized | No devices found");
+            } else {
+                ESP_LOGI(TAG, "I2C: Initialized | Scanning...");
+            }
+        } else {
+            ESP_LOGI(TAG, "I2C: Not initialized");
+            // Reset cache when I2C is not initialized
+            cached_device_count = 0;
+            i2c_scan_complete = false;
         }
 
         // Send heartbeat to watchdog
