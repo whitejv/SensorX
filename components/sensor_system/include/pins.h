@@ -97,11 +97,36 @@
 
 // ============================================================================
 // JTAG Debug Pins (for ESP-PROG connection)
+// IMPORTANT: These pins must NOT be used for other functions when debugging
 // ============================================================================
-#define PIN_JTAG_TDI GPIO_NUM_12  // GPIO12 - JTAG Data In
-#define PIN_JTAG_TDO GPIO_NUM_13  // GPIO13 - JTAG Data Out
-#define PIN_JTAG_TCK GPIO_NUM_14  // GPIO14 - JTAG Clock
-#define PIN_JTAG_TMS GPIO_NUM_15  // GPIO15 - JTAG Mode Select (shared with red LED!)
+#define PIN_JTAG_TDI GPIO_NUM_12  // GPIO12 - JTAG Data In (DO NOT USE FOR OTHER FUNCTIONS)
+#define PIN_JTAG_TDO GPIO_NUM_13  // GPIO13 - JTAG Data Out (DO NOT USE FOR OTHER FUNCTIONS)
+#define PIN_JTAG_TCK GPIO_NUM_14  // GPIO14 - JTAG Clock (DO NOT USE FOR OTHER FUNCTIONS)
+#define PIN_JTAG_TMS GPIO_NUM_15  // GPIO15 - JTAG Mode Select (DO NOT USE FOR OTHER FUNCTIONS - shared with LED)
+
+
+// ============================================================================
+// Sensor and I/O Pin Definitions
+// ============================================================================
+
+// PCNT Flow Sensor Pins (Hall effect flow sensors - pulse counting)
+#define PIN_FLOW_SENSOR_1   GPIO_NUM_7   // GPIO7 - PCNT Flow Sensor 1 (PCNT_UNIT_0)
+#define PIN_FLOW_SENSOR_2   GPIO_NUM_8   // GPIO8 - PCNT Flow Sensor 2 (PCNT_UNIT_1)
+#define PIN_FLOW_SENSOR_3   GPIO_NUM_11  // GPIO11 - PCNT Flow Sensor 3 (PCNT_UNIT_2)
+
+// One-Wire Temperature Sensor Pin (DS18B20 sensors on shared bus)
+#define PIN_ONEWIRE_TEMP    GPIO_NUM_6   // GPIO6 - One-Wire bus for DS18B20 sensors
+// Note: GPIO6 is ADC-capable but used as digital One-Wire bus
+
+// Fan Control Pin
+#define PIN_FAN_CONTROL     GPIO_NUM_16  // GPIO16 - Fan control output (HIGH = ON, LOW = OFF)
+// Note: GPIO16 is shared with UART TX - if UART is needed externally, use GPIO21 instead
+
+// Discrete GPIO Input Pins (config/status inputs)
+#define PIN_DISC_INPUT_1    GPIO_NUM_0   // GPIO0 - Discrete input 1 (config/status)
+#define PIN_DISC_INPUT_2    GPIO_NUM_1   // GPIO1 - Discrete input 2 (config/status)
+#define PIN_DISC_INPUT_3    GPIO_NUM_2   // GPIO2 - Discrete input 3 (config/status)
+// Note: GPIO0-2 are ADC-capable but used as digital inputs
 
 
 // ============================================================================
@@ -123,19 +148,75 @@
 // ============================================================================
 // Important Pin Sharing Notes
 // ============================================================================
-// - GPIO0: Available as digital IO0, also ADC1_CH0 (but not Arduino "A0")
-// - GPIO1: Arduino "A0" and "1", can be analog or digital
-// - GPIO2: Arduino "A5" and "2", can be analog or digital
-// - GPIO3: Arduino "A4" and "3", can be analog or digital
-// - GPIO4: Arduino "A1" and "4", can be analog or digital
-// - GPIO5: Arduino "A3" and "5", can be analog or digital
-// - GPIO6: Arduino "A2" and "6", can be analog or digital
-// - GPIO9: Shared between NeoPixel, Boot button, and Digital IO9
-// - GPIO10: Shared between SPI CS and Digital IO10
-// - GPIO12: Shared between JTAG TDI and Digital IO12
-// - GPIO13: Shared between JTAG TDO and Digital IO13
-// - GPIO14: Shared between JTAG TCK and Digital IO14
-// - GPIO15: Shared between red LED, JTAG TMS, and Digital IO15 (disable LED when debugging)
-// - GPIO20: EN pin - also powers STEMMA QT connector and NeoPixel when high (NEOPIXEL_I2C_POWER)
+// - GPIO0: Assigned as Discrete Input 1, also ADC1_CH0 (but not Arduino "A0")
+// - GPIO1: Assigned as Discrete Input 2, Arduino "A0" and "1", can be analog or digital
+// - GPIO2: Assigned as Discrete Input 3, Arduino "A5" and "2", can be analog or digital
+// - GPIO3: Available as digital IO3, also ADC1_CH3 (Arduino "A4")
+// - GPIO4: Available as digital IO4, also ADC1_CH4 (Arduino "A1")
+// - GPIO5: Available as digital IO5, also ADC1_CH5 (Arduino "A3")
+// - GPIO6: Assigned as One-Wire Temperature bus, Arduino "A2" and "6", can be analog or digital
+// - GPIO7: Assigned as PCNT Flow Sensor 1, Digital IO7
+// - GPIO8: Assigned as PCNT Flow Sensor 2, Digital IO8
+// - GPIO9: Shared between NeoPixel, Boot button, and Digital IO9 (available if unused)
+// - GPIO10: Shared between SPI CS and Digital IO10 (available if SPI unused)
+// - GPIO11: Assigned as PCNT Flow Sensor 3, Digital IO11
+// - GPIO12: RESERVED for JTAG TDI - DO NOT USE for other functions
+// - GPIO13: RESERVED for JTAG TDO - DO NOT USE for other functions
+// - GPIO14: RESERVED for JTAG TCK - DO NOT USE for other functions
+// - GPIO15: RESERVED for JTAG TMS - DO NOT USE for other functions (shared with red LED)
+// - GPIO16: Assigned as Fan Control output (shared with UART TX - choose one function)
+// - GPIO17: UART RX (reserved if UART needed)
+// - GPIO18: RESERVED for I2C SCL - DO NOT USE for other functions
+// - GPIO19: RESERVED for I2C SDA - DO NOT USE for other functions
+// - GPIO20: RESERVED for STEMMA QT power enable - MUST be HIGH for I2C devices (NEOPIXEL_I2C_POWER)
+// - GPIO21: SPI SCK (available if SPI unused)
+// - GPIO22: SPI MOSI (available if SPI unused)
+// - GPIO23: SPI MISO (available if SPI unused)
 
-#endif /* PINS_H */
+
+// ============================================================================
+// GPIO Pin Status Summary Table
+// ============================================================================
+// | GPIO | Function                  | Status      | Notes                        |
+// |------|---------------------------|-------------|------------------------------|
+// | 0    | Discrete Input 1          | Assigned    | ADC-capable                  |
+// | 1    | Discrete Input 2          | Assigned    | ADC-capable                  |
+// | 2    | Discrete Input 3          | Assigned    | ADC-capable                  |
+// | 3    | Available                | Free        | ADC-capable                  |
+// | 4    | Available                | Free        | ADC-capable                  |
+// | 5    | Available                | Free        | ADC-capable                  |
+// | 6    | One-Wire Temperature      | Assigned    | ADC-capable                  |
+// | 7    | PCNT Flow Sensor 1        | Assigned    | Digital only                 |
+// | 8    | PCNT Flow Sensor 2        | Assigned    | Digital only                 |
+// | 9    | Boot/NeoPixel             | Shared      | Available if unused          |
+// | 10   | SPI CS                   | Shared      | Available if SPI unused       |
+// | 11   | PCNT Flow Sensor 3        | Assigned    | Digital only                 |
+// | 12   | JTAG TDI                 | Reserved    | DO NOT USE                   |
+// | 13   | JTAG TDO                 | Reserved    | DO NOT USE                   |
+// | 14   | JTAG TCK                 | Reserved    | DO NOT USE                   |
+// | 15   | JTAG TMS / LED           | Reserved    | DO NOT USE                   |
+// | 16   | Fan Control / UART TX    | Conflict    | Choose one function          |
+// | 17   | UART RX                  | Reserved    | If UART needed              |
+// | 18   | I2C SCL                  | Reserved    | In use                       |
+// | 19   | I2C SDA                  | Reserved    | In use                       |
+// | 20   | STEMMA QT Power Enable    | Reserved    | In use                       |
+// | 21   | SPI SCK                  | Shared      | Available if SPI unused       |
+// | 22   | SPI MOSI                 | Shared      | Available if SPI unused       |
+// | 23   | SPI MISO                 | Shared      | Available if SPI unused       |
+//
+// Summary Statistics:
+// - Total GPIO pins (0-23): 24 pins
+// - Assigned for sensors/I/O: 9 pins (GPIO0, 1, 2, 6, 7, 8, 11, 16, 20)
+// - Reserved for critical functions: 6 pins (GPIO12-15 JTAG, GPIO18-19 I2C)
+// - Available for future use: 6 pins (GPIO3, 4, 5, 9, 10, 21-23)
+// - Shared/conflict pins: 3 pins (GPIO9, GPIO16, GPIO21-23)
+//
+// Notes:
+// - GPIO3-5: Fully available ADC-capable pins for future analog sensors or digital I/O
+// - GPIO9: Available if NeoPixel not used; boot button conflict only during reset
+// - GPIO10, 21-23: Available if SPI not needed; otherwise reserved for SPI
+// - GPIO16: Choose between fan control or UART TX; if UART needed, use GPIO21 for fan
+// - GPIO20: Already configured and used in i2c_manager.c for STEMMA QT power
+// - All sensor requirements are covered with 9 pins assigned
+// - 6 pins remain available for future expansion
+// ============================================================================
