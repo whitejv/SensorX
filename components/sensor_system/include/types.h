@@ -12,7 +12,7 @@
 #include <stdbool.h>
 
 // Forward declarations for data structures
-typedef struct FlowData FlowData_t;
+// Note: FlowData_t is defined in sensor.h (shared interface)
 typedef struct SensorData SensorData_t;
 typedef struct SystemStatus SystemStatus_t;
 
@@ -61,14 +61,8 @@ typedef enum {
     ERROR_CHECKSUM
 } ErrorCode_t;
 
-// Flow sensor data structure (bit-packed for efficiency)
-struct FlowData {
-    uint32_t pulses : 12;       // 12 bits for pulse count (0-4095)
-    uint32_t milliseconds : 19; // 19 bits for milliseconds (0-524287)
-    uint32_t newData : 1;       // 1 bit for new data flag
-};
-
 // Basic sensor data structure
+// Note: FlowData_t is defined in sensor.h (shared interface for cross-platform compatibility)
 struct SensorData {
     SensorType_t type;          // Sensor type
     SensorPriority_t priority;  // Sensor priority level

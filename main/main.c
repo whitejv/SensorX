@@ -14,6 +14,8 @@
 #include "mqtt_manager.h"   // From sensor_system component
 #include "sensor_acquisition.h" // From sensor_system component
 #include "mqtt_publisher.h"     // From sensor_system component
+#include "sensor_coordination.h" // From sensor_system component
+#include "sensor.h"          // From sensor_system component
 
 static const char *TAG = "MAIN";
 
@@ -91,7 +93,17 @@ void app_main(void) {
         }
     }
 
-    // 4. Initialize I2C Manager (non-critical - continue if fails)
+    // 4. Initialize Sensor Coordination System (Phase 0 - Foundation)
+    // This must be initialized before any sensor managers
+    ret = sensor_coordination_init();
+    if (ret != ESP_OK) {
+        error_report(ERROR_MEMORY_ALLOCATION, ERROR_SEVERITY_CRITICAL, "app_main", NULL);
+        ESP_LOGE(TAG, "Failed to initialize sensor coordination: %s", esp_err_to_name(ret));
+        abort();
+    }
+    ESP_LOGI(TAG, "Sensor coordination system initialized successfully");
+
+    // 5. Initialize I2C Manager (non-critical - continue if fails)
     ret = i2c_manager_init();
     if (ret != ESP_OK) {
         error_report(ERROR_I2C_TIMEOUT, ERROR_SEVERITY_ERROR, "app_main", NULL);
@@ -101,7 +113,7 @@ void app_main(void) {
         ESP_LOGI(TAG, "I2C manager initialized successfully");
     }
 
-    // 5. Initialize MQTT Manager (after WiFi, non-critical - continue if fails)
+    // 6. Initialize MQTT Manager (after WiFi, non-critical - continue if fails)
     // Note: MQTT init requires WiFi to be connected, so we'll initialize it
     // after WiFi connection is established
     if (wifi_manager_is_connected()) {
@@ -125,7 +137,7 @@ void app_main(void) {
         ESP_LOGI(TAG, "WiFi not connected yet, MQTT initialization deferred");
     }
 
-    // 6. Create the system information task
+    // 7. Create the system information task
     BaseType_t xResult = xTaskCreate(
         vSystemInfoTask,              // Task function
         "SystemInfo",                 // Task name
@@ -142,7 +154,7 @@ void app_main(void) {
         ESP_LOGW(TAG, "WARNING: Failed to create system information task");
     }
 
-    // 7. Create the system monitoring task
+    // 8. Create the system monitoring task
     xResult = xTaskCreate(
         vSystemMonitorTask,           // Task function
         "SysMonitor",                 // Task name
@@ -162,7 +174,7 @@ void app_main(void) {
         abort();
     }
 
-    // 8. Create the heartbeat task
+    // 9. Create the heartbeat task
     xResult = xTaskCreate(
         vHeartbeatTask,               // Task function
         "Heartbeat",                  // Task name
@@ -181,7 +193,7 @@ void app_main(void) {
         ESP_LOGW(TAG, "WARNING: Failed to create heartbeat task");
     }
 
-    // 9. Create the sensor acquisition task (critical priority)
+    // 10. Create the sensor acquisition task (critical priority)
     xResult = xTaskCreate(
         vSensorAcquisitionTask,         // Task function
         "SensorAcq",                     // Task name
@@ -201,7 +213,7 @@ void app_main(void) {
         abort();
     }
 
-    // 10. Create the MQTT publisher task
+    // 11. Create the MQTT publisher task
     xResult = xTaskCreate(
         vMqttPublisherTask,              // Task function
         "MqttPub",                       // Task name

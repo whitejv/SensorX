@@ -119,8 +119,8 @@
 // Note: GPIO6 is ADC-capable but used as digital One-Wire bus
 
 // Fan Control Pin
-#define PIN_FAN_CONTROL     GPIO_NUM_16  // GPIO16 - Fan control output (HIGH = ON, LOW = OFF)
-// Note: GPIO16 is shared with UART TX - if UART is needed externally, use GPIO21 instead
+#define PIN_FAN_CONTROL     GPIO_NUM_21  // GPIO21 - Fan control output (HIGH = ON, LOW = OFF)
+// Note: Changed from GPIO16 (UART TX conflict) to GPIO21 (SPI SCK, available if SPI unused)
 
 // Discrete GPIO Input Pins (config/status inputs)
 #define PIN_DISC_INPUT_1    GPIO_NUM_0   // GPIO0 - Discrete input 1 (config/status)
@@ -195,28 +195,31 @@
 // | 13   | JTAG TDO                 | Reserved    | DO NOT USE                   |
 // | 14   | JTAG TCK                 | Reserved    | DO NOT USE                   |
 // | 15   | JTAG TMS / LED           | Reserved    | DO NOT USE                   |
-// | 16   | Fan Control / UART TX    | Conflict    | Choose one function          |
+// | 16   | UART TX                  | Reserved    | If UART needed              |
 // | 17   | UART RX                  | Reserved    | If UART needed              |
 // | 18   | I2C SCL                  | Reserved    | In use                       |
 // | 19   | I2C SDA                  | Reserved    | In use                       |
 // | 20   | STEMMA QT Power Enable    | Reserved    | In use                       |
-// | 21   | SPI SCK                  | Shared      | Available if SPI unused       |
+// | 21   | Fan Control              | Assigned    | Changed from GPIO16 (UART conflict) |
 // | 22   | SPI MOSI                 | Shared      | Available if SPI unused       |
 // | 23   | SPI MISO                 | Shared      | Available if SPI unused       |
 //
 // Summary Statistics:
 // - Total GPIO pins (0-23): 24 pins
-// - Assigned for sensors/I/O: 9 pins (GPIO0, 1, 2, 6, 7, 8, 11, 16, 20)
+// - Assigned for sensors/I/O: 9 pins (GPIO0, 1, 2, 6, 7, 8, 11, 20, 21)
 // - Reserved for critical functions: 6 pins (GPIO12-15 JTAG, GPIO18-19 I2C)
-// - Available for future use: 6 pins (GPIO3, 4, 5, 9, 10, 21-23)
-// - Shared/conflict pins: 3 pins (GPIO9, GPIO16, GPIO21-23)
+// - Available for future use: 9 pins (GPIO3, 4, 5, 9, 10, 16, 17, 22, 23)
+// - Shared/conflict pins: 5 pins (GPIO9, GPIO16-17 UART, GPIO22-23 SPI)
 //
 // Notes:
 // - GPIO3-5: Fully available ADC-capable pins for future analog sensors or digital I/O
 // - GPIO9: Available if NeoPixel not used; boot button conflict only during reset
-// - GPIO10, 21-23: Available if SPI not needed; otherwise reserved for SPI
-// - GPIO16: Choose between fan control or UART TX; if UART needed, use GPIO21 for fan
+// - GPIO10, 22-23: Available if SPI not needed; otherwise reserved for SPI
+// - GPIO16-17: Reserved for UART TX/RX if UART needed externally
+// - GPIO21: Assigned for fan control (changed from GPIO16 to avoid UART conflict)
 // - GPIO20: Already configured and used in i2c_manager.c for STEMMA QT power
 // - All sensor requirements are covered with 9 pins assigned
-// - 6 pins remain available for future expansion
+// - 9 pins remain available for future expansion
 // ============================================================================
+
+#endif /* PINS_H */

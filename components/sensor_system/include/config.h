@@ -33,7 +33,8 @@
 #define MQTT_PUBLISH_INTERVAL        1000  // MQTT publishing interval
 #define SD_LOG_FLUSH_INTERVAL        2000  // SD card flush interval (2-5 sec range)
 #define SYSTEM_STATUS_INTERVAL       30000 // System status reporting
-#define MONITOR_INTERVAL_MS          5000  // System monitor task interval
+#define MONITOR_INTERVAL_MS          1000  // System monitor task interval (fan control check every 1s)
+#define MONITOR_LOG_INTERVAL_MS      5000  // System monitor logging interval (log every 5s)
 
 // Buffer sizes
 #define SERIAL_BUFFER_SIZE           256   // Serial input buffer
@@ -44,6 +45,34 @@
 #define FLOW_SENSOR_TIMEOUT          2000  // Flow sensor measurement timeout
 #define TEMPERATURE_READ_TIMEOUT     1000  // Temperature sensor timeout
 #define ADC_READ_TIMEOUT             500   // ADC conversion timeout
+
+// Sensor Manager Timing Constants
+#define PCNT_FLOW_TASK_INTERVAL_MS       1000  // Flow sensors (read every 1s, accumulate over 2s)
+#define I2C_ADC_TASK_INTERVAL_MS         1000  // ADC sensors
+#define I2C_GPIO_TASK_INTERVAL_MS        1000  // I2C GPIO expander
+#define GPIO_DISCRETE_TASK_INTERVAL_MS   1000  // Discrete GPIO inputs
+#define I2C_ENV_TASK_INTERVAL_MS         5000  // Environmental sensors
+#define ONEWIRE_TEMP_TASK_INTERVAL_MS    5000  // Temperature sensors
+#define MQTT_PUBLISH_INTERVAL_MS         1000  // MQTT publishing interval (matches existing MQTT_PUBLISH_INTERVAL)
+
+// Sensor Coordination Constants
+#define SENSOR_MUTEX_TIMEOUT_MS          100   // Mutex timeout for sensor data access (ms)
+#define SENSOR_EVENT_WAIT_TIMEOUT_MS     100   // Event group wait timeout for publisher (ms)
+
+// Fan Control Constants
+#define FAN_CONTROL_GPIO_PIN                  GPIO_NUM_21  // GPIO21 - Fan control (changed from GPIO16 to avoid UART conflict)
+#define FAN_CONTROL_THRESHOLD_TEMP_F          70.0   // Fan ON threshold (°F) - BME280 ambient
+#define FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F 85.0   // Fan ON threshold (°F) - Die temp fallback
+#define FAN_CONTROL_TEMP_VALID_MIN_F          -40.0  // Minimum valid ambient temperature (°F)
+#define FAN_CONTROL_TEMP_VALID_MAX_F          150.0  // Maximum valid ambient temperature (°F)
+#define FAN_CONTROL_DIE_TEMP_VALID_MIN_F      32.0   // Minimum valid die temperature (°F)
+#define FAN_CONTROL_DIE_TEMP_VALID_MAX_F      185.0  // Maximum valid die temperature (°F)
+#define FAN_CONTROL_MUTEX_TIMEOUT_MS          100    // Mutex timeout for temperature read (ms)
+#define FAN_CONTROL_INTERVAL_MS               1000   // Fan control check interval (ms)
+
+// Sensor Data Display
+#define SENSOR_DATA_VERBOSE_ENABLED        1   // Enable verbose sensor data output (0=disabled, 1=enabled)
+#define SENSOR_DATA_VERBOSE_INTERVAL_MS    1000  // Print interval in milliseconds
 
 // I2C configuration
 #define I2C_CLOCK_SPEED              100000 // 100kHz (I2C Standard-mode, optimal default)

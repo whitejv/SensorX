@@ -145,8 +145,8 @@ This document provides a comprehensive, methodical implementation strategy for t
 - ✅ Future test: Verify fan control with BME280 when Phase 6 is complete
 
 **Hardware Required**:
-- GPIO16 configured for fan control output
-- Fan connected to GPIO16
+- GPIO21 configured for fan control output (changed from GPIO16 to avoid UART conflict)
+- Fan connected to GPIO21
 - BME280 sensor (optional - will be added in Phase 6)
 
 **Success Criteria**:

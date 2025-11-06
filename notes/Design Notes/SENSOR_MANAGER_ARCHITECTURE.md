@@ -372,9 +372,9 @@ void vSystemMonitorTask(void *pvParameters) {
             xSemaphoreGive(sensor_data.mutex);
             
             if (current_temp >= 70.0) {
-                gpio_set_level(GPIO_NUM_16, 1);  // Fan ON
+                gpio_set_level(GPIO_NUM_21, 1);  // Fan ON
             } else {
-                gpio_set_level(GPIO_NUM_16, 0);  // Fan OFF
+                gpio_set_level(GPIO_NUM_21, 0);  // Fan OFF
             }
         }
         

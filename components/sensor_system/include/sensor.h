@@ -143,6 +143,18 @@ union GENERICSENS_ {
 #pragma pack(pop)
 
 // ============================================================================
+// Global Sensor Data Instance
+// ============================================================================
+
+/**
+ * Global GenericSens Instance
+ * 
+ * Defined in sensor_coordination.c, declared here for global access.
+ * This is the shared sensor data structure that all sensor managers update.
+ */
+extern union GENERICSENS_ genericSens_;
+
+// ============================================================================
 // JSON Variable Names
 // ============================================================================
 

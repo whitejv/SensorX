@@ -81,12 +81,12 @@ ELSE:
 
 ### GPIO Configuration
 
-**Fan Control Pin**: GPIO16 (defined as `DISCINPUT1` in Arduino code)
+**Fan Control Pin**: GPIO21 (changed from GPIO16 to avoid UART TX conflict)
 
 **GPIO Setup**:
 ```c
 gpio_config_t fan_config = {
-    .pin_bit_mask = (1ULL << GPIO_NUM_16),
+    .pin_bit_mask = (1ULL << GPIO_NUM_21),
     .mode = GPIO_MODE_OUTPUT,
     .pull_up_en = GPIO_PULLUP_DISABLE,
     .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -134,7 +134,7 @@ void vSystemMonitorTask(void *pvParameters) {
     
     // Initialize fan control GPIO
     gpio_config_t fan_config = {
-        .pin_bit_mask = (1ULL << GPIO_NUM_16),
+        .pin_bit_mask = (1ULL << GPIO_NUM_21),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -143,7 +143,7 @@ void vSystemMonitorTask(void *pvParameters) {
     ESP_ERROR_CHECK(gpio_config(&fan_config));
     
     // Start with fan OFF
-    gpio_set_level(GPIO_NUM_16, 0);
+    gpio_set_level(GPIO_NUM_21, 0);
     
     // Register with watchdog
     watchdog_register_current_task("SysMonitor", MONITOR_INTERVAL_MS + 1000);
@@ -226,19 +226,19 @@ void vSystemMonitorTask(void *pvParameters) {
             float threshold = using_fallback ? FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F : FAN_CONTROL_THRESHOLD_TEMP_F;
             
             if (current_temp >= threshold) {
-                gpio_set_level(GPIO_NUM_16, 1);  // Fan ON
+                gpio_set_level(GPIO_NUM_21, 1);  // Fan ON
                 ESP_LOGD(TAG, "Fan ON: %s temp %.1f°F >= %.1f°F", 
                          using_fallback ? "Die" : "Ambient", 
                          current_temp, threshold);
             } else {
-                gpio_set_level(GPIO_NUM_16, 0);  // Fan OFF
+                gpio_set_level(GPIO_NUM_21, 0);  // Fan OFF
                 ESP_LOGD(TAG, "Fan OFF: %s temp %.1f°F < %.1f°F", 
                          using_fallback ? "Die" : "Ambient", 
                          current_temp, threshold);
             }
         } else {
             // No valid temperature source - default to fan ON for safety
-            gpio_set_level(GPIO_NUM_16, 1);  // Fan ON (safe default)
+            gpio_set_level(GPIO_NUM_21, 1);  // Fan ON (safe default)
             ESP_LOGW(TAG, "No valid temperature source - fan ON for safety");
         }
         
@@ -270,7 +270,7 @@ void vSystemMonitorTask(void *pvParameters) {
             
             // Get fan control status and temperature (from fan control section above)
             // Note: These variables are maintained in the fan control section
-            bool fan_state = gpio_get_level(GPIO_NUM_16);
+            bool fan_state = gpio_get_level(GPIO_NUM_21);
             
             // Display monitoring information
             ESP_LOGI(TAG, "--- System Monitor ---");
@@ -360,9 +360,9 @@ if (xSemaphoreTake(sensor_data.mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
     
     // Use temperature value (outside mutex to reduce hold time)
     if (current_temp >= FAN_CONTROL_THRESHOLD_TEMP_F) {
-        gpio_set_level(GPIO_NUM_16, 1);
+        gpio_set_level(GPIO_NUM_21, 1);
     } else {
-        gpio_set_level(GPIO_NUM_16, 0);
+        gpio_set_level(GPIO_NUM_21, 0);
     }
 }
 ```
@@ -508,17 +508,17 @@ if (temp_valid) {
     float threshold = using_fallback ? FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F : FAN_CONTROL_THRESHOLD_TEMP_F;
     
     if (current_temp >= threshold) {
-        gpio_set_level(GPIO_NUM_16, 1);
+        gpio_set_level(GPIO_NUM_21, 1);
         ESP_LOGD(TAG, "Fan ON: %s temp %.1f°F >= %.1f°F", 
                  using_fallback ? "Die" : "Ambient", current_temp, threshold);
     } else {
-        gpio_set_level(GPIO_NUM_16, 0);
+        gpio_set_level(GPIO_NUM_21, 0);
         ESP_LOGD(TAG, "Fan OFF: %s temp %.1f°F < %.1f°F", 
                  using_fallback ? "Die" : "Ambient", current_temp, threshold);
     }
 } else {
     // Both sources failed - default to fan ON for safety
-    gpio_set_level(GPIO_NUM_16, 1);
+    gpio_set_level(GPIO_NUM_21, 1);
     ESP_LOGW(TAG, "No valid temperature source - fan ON for safety");
 }
 ```
@@ -630,7 +630,7 @@ I (12348) SYSTEM_INIT: --- Monitor Complete ---
 ```
 
 **Fan Status Display Format**:
-- **Fan State**: "ON" or "OFF" (based on GPIO16 level)
+- **Fan State**: "ON" or "OFF" (based on GPIO21 level)
 - **Temperature Source**: "Ambient" (BME280) or "Die" (ESP32-C6 internal)
 - **Temperature Value**: Current temperature in Fahrenheit (or 0.0 if invalid)
 - **Threshold**: Active threshold (70.0°F for ambient, 85.0°F for die temp)
@@ -659,7 +659,7 @@ I (12347) SYSTEM_INIT: Fan: ON | Temp: N/A | Threshold: N/A
 Could publish fan control status via MQTT:
 ```c
 // In MQTT publisher or System Monitor
-cJSON_AddBoolToObject(json, "fan_on", gpio_get_level(GPIO_NUM_16));
+cJSON_AddBoolToObject(json, "fan_on", gpio_get_level(GPIO_NUM_21));
 cJSON_AddNumberToObject(json, "fan_control_temp", last_known_temp);
 ```
 
@@ -711,7 +711,7 @@ cJSON_AddNumberToObject(json, "fan_control_temp", last_known_temp);
 #define MONITOR_INTERVAL_MS                   1000  // System monitor task interval (fan control check)
 
 // system_init.c or config.h
-#define FAN_CONTROL_GPIO_PIN                  GPIO_NUM_16
+#define FAN_CONTROL_GPIO_PIN                  GPIO_NUM_21
 #define FAN_CONTROL_THRESHOLD_TEMP_F          70.0   // Fan ON threshold (°F) - BME280 ambient
 #define FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F 85.0   // Fan ON threshold (°F) - Die temp fallback
 #define FAN_CONTROL_TEMP_VALID_MIN_F          -40.0  // Minimum valid ambient temperature (°F)
@@ -725,7 +725,7 @@ cJSON_AddNumberToObject(json, "fan_control_temp", last_known_temp);
 
 ```c
 // pins.h (if not already defined)
-#define PIN_FAN_CONTROL    GPIO_NUM_16  // Fan control output pin
+#define PIN_FAN_CONTROL    GPIO_NUM_21  // Fan control output pin
 ```
 
 ## Summary

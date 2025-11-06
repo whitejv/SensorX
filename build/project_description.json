@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "SensorBase",
-    "project_version":    "190c5a3-dirty",
+    "project_version":    "1a43226-dirty",
     "project_path":       "/Volumes/iHome/Users/dub/esp/SensorX",
     "idf_path":           "/Volumes/iHome/Users/dub/esp/v5.5.1/esp-idf",
     "build_dir":          "/Volumes/iHome/Users/dub/esp/SensorX/build",
@@ -1450,7 +1450,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/sensor_system/libsensor_system.a",
-            "sources": [ "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/system_init.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/watchdog.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/error_recovery.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/wifi_manager.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/i2c_manager.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/mqtt_manager.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/sensor_acquisition.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/mqtt_publisher.c" ],
+            "sources": [ "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/system_init.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/watchdog.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/error_recovery.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/wifi_manager.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/i2c_manager.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/mqtt_manager.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/sensor_acquisition.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/mqtt_publisher.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/sensor.c", "/Volumes/iHome/Users/dub/esp/SensorX/components/sensor_system/src/sensor_coordination.c" ],
             "include_dirs": [ "include" ]
         },
         "soc": {
