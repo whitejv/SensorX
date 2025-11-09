@@ -125,14 +125,16 @@ extern GenericSensorData_t genericSens_;
 
 **Registration**:
 ```c
-pcnt_flow_manager_register_sensor(GPIO_NUM_4, PCNT_UNIT_0, "Flow1");
-pcnt_flow_manager_register_sensor(GPIO_NUM_5, PCNT_UNIT_1, "Flow2");
+pcnt_flow_manager_register_sensor(GPIO_NUM_7, PCNT_UNIT_0, "Flow1");
+pcnt_flow_manager_register_sensor(GPIO_NUM_8, PCNT_UNIT_1, "Flow2");
+pcnt_flow_manager_register_sensor(GPIO_NUM_3, PCNT_UNIT_2, "Flow3");
 ```
 
 **Updates genericSens_ fields**:
 - `genericSens_.flowData1` (bit-packed FlowData structure) - updated every 1000ms
 - `genericSens_.flowData2` (bit-packed FlowData structure) - updated every 1000ms
-- `genericSens_.flowData1.newData` / `flowData2.newData` - set to 1 only when 2000ms accumulation complete
+- `genericSens_.flowData3` (bit-packed FlowData structure) - updated every 1000ms
+- `genericSens_.flowData1.newData` / `flowData2.newData` / `flowData3.newData` - set to 1 only when 2000ms accumulation complete
 
 ### I2C ADC Sensor Manager
 
@@ -713,8 +715,9 @@ void app_main(void) {
     
     // Initialize and start PCNT Flow Manager (reads every 1000ms, accumulates over 2000ms)
     pcnt_flow_manager_init();
-    pcnt_flow_manager_register_sensor(GPIO_NUM_4, PCNT_UNIT_0, "Flow1");
-    pcnt_flow_manager_register_sensor(GPIO_NUM_5, PCNT_UNIT_1, "Flow2");
+    pcnt_flow_manager_register_sensor(GPIO_NUM_7, PCNT_UNIT_0, "Flow1");
+    pcnt_flow_manager_register_sensor(GPIO_NUM_8, PCNT_UNIT_1, "Flow2");
+    pcnt_flow_manager_register_sensor(GPIO_NUM_3, PCNT_UNIT_2, "Flow3");
     pcnt_flow_manager_start_task();
     
     // Initialize and start I2C ADC Manager

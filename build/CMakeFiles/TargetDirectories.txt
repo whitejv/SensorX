@@ -838,6 +838,13 @@
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/wifi_provisioning/CMakeFiles/install.dir
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/wifi_provisioning/CMakeFiles/install/local.dir
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/wifi_provisioning/CMakeFiles/install/strip.dir
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espressif__onewire_bus/CMakeFiles/__idf_espressif__onewire_bus.dir
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espressif__onewire_bus/CMakeFiles/edit_cache.dir
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espressif__onewire_bus/CMakeFiles/rebuild_cache.dir
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espressif__onewire_bus/CMakeFiles/list_install_components.dir
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espressif__onewire_bus/CMakeFiles/install.dir
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espressif__onewire_bus/CMakeFiles/install/local.dir
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espressif__onewire_bus/CMakeFiles/install/strip.dir
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/sensor_system/CMakeFiles/__idf_sensor_system.dir
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/sensor_system/CMakeFiles/edit_cache.dir
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/sensor_system/CMakeFiles/rebuild_cache.dir

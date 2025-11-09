@@ -301,7 +301,7 @@ This document provides a comprehensive, methodical implementation strategy for t
 - ✅ System test: Verify no interference with other tasks (critical priority)
 
 **Hardware Required**:
-- 3 flow sensors connected to GPIO7, GPIO8, GPIO11
+- 3 flow sensors connected to GPIO7, GPIO8, GPIO3
 - Flow sensor signal generation (or actual flow)
 
 **Success Criteria**:

@@ -4,13 +4,17 @@
 
 This document describes the design approach for the One-Wire Temperature Manager in the SensorX ESP32-C6 system. This manager handles DS18B20 temperature sensors connected via a single One-Wire bus, implementing cooperative multitasking to ensure other tasks can execute during long sensor read operations.
 
+**Implementation**: Uses the official Espressif `onewire_bus` component, which provides hardware-based timing via the RMT peripheral. This eliminates the need for bit-banging and provides more reliable operation.
+
 ## Design Philosophy
 
 **Cooperative Multitasking**: The One-Wire protocol involves timing-sensitive operations that can take significant time (750ms per sensor typical). To prevent blocking other tasks of the same priority, the implementation yields CPU time between sensor reads using FreeRTOS `vTaskDelay()`.
 
-**Complete Cycle Reading**: All sensors are read within a single 5000ms task cycle. Small yield points (10-20ms) between sensors allow other same-priority tasks brief execution windows while completing all reads within the allocated time.
+**Complete Cycle Reading**: All sensors are read within a single 5000ms task cycle. Small yield points (20ms) between sensors allow other same-priority tasks brief execution windows while completing all reads within the allocated time.
 
 **Priority Considerations**: Running at `TASK_PRIORITY_BACKGROUND` (1), the lowest priority ensures higher priority tasks (sensor acquisition, MQTT publishing) are never blocked.
+
+**Hardware-Based Timing**: Uses ESP-IDF's official `onewire_bus` component with RMT peripheral for precise, hardware-assisted timing. No CPU load during protocol operations.
 
 ## Hardware Overview
 
@@ -18,9 +22,15 @@ This document describes the design approach for the One-Wire Temperature Manager
 
 **Protocol Characteristics**:
 - Single GPIO pin for bidirectional communication
-- Bit-banged protocol (software-driven timing)
+- **Hardware-based protocol** using RMT peripheral (no bit-banging)
 - Pull-up resistor required (typically 4.7kΩ)
-- Timing-sensitive operations with precise delays
+- Timing handled by hardware (RMT peripheral)
+
+**Implementation**: Uses official Espressif `onewire_bus` component:
+- Component: `espressif/onewire_bus` (ESP Component Registry)
+- Timing: RMT peripheral handles all timing-critical operations
+- CPU Load: Minimal (hardware handles protocol)
+- Reliability: High (hardware timing is precise)
 
 **DS18B20 Temperature Sensor**:
 - 12-bit resolution (0.0625°C resolution)
@@ -37,8 +47,9 @@ This document describes the design approach for the One-Wire Temperature Manager
 - Up to 4 sensors supported (based on `genericSens_` structure)
 
 **GPIO Pin Selection**:
-- Pin: Configurable (typically GPIO_NUM_6 or similar)
-- Mode: Open-drain with external pull-up
+- Pin: GPIO_NUM_6 (defined as `PIN_ONEWIRE_TEMP`)
+- Configuration: Handled automatically by `onewire_bus` component
+- Mode: Open-drain with pull-up (component configures)
 - Shared with other sensors on same bus
 
 ## Task Design
@@ -65,23 +76,28 @@ This document describes the design approach for the One-Wire Temperature Manager
 ### Task Lifecycle
 
 ```
-1. Task initialization
-   a. Initialize One-Wire GPIO pin
-   b. Scan bus for DS18B20 devices
-   c. Store ROM codes for discovered sensors
-   d. Register with watchdog system
+1. Task initialization (in onewire_temp_manager_init())
+   a. Initialize One-Wire bus using onewire_new_bus_rmt()
+   b. Scan bus for DS18B20 devices using onewire_search_devices()
+   c. Store device handles for discovered sensors
+   d. Create FreeRTOS task
+   e. Task registers with watchdog system
 
-2. Main task loop:
-   a. Read all sensors sequentially (0-3)
+2. Main task loop (vOneWireTempManagerTask):
+   a. Read all sensors sequentially (0 to num_sensors-1)
    b. For each sensor:
-      - Request temperature conversion (non-blocking)
+      - Select device using onewire_select_device()
+      - Request temperature conversion (CONVERT_T command)
       - Wait for conversion (750ms)
-      - Read temperature from scratchpad
+      - Reset bus and select device again
+      - Read temperature from scratchpad (READ_SCRATCHPAD command)
+      - Verify CRC using onewire_crc8()
       - Convert to Fahrenheit
       - Update genericSens_ structure (mutex-protected)
-      - Small yield (10-20ms) between sensors
-   c. Send watchdog heartbeat
-   d. Delay for task interval (5000ms)
+      - Small yield (20ms) between sensors
+   c. Signal completion (SENSOR_EVENT_TEMP_COMPLETE)
+   d. Send watchdog heartbeat
+   e. Delay for task interval (5000ms)
 ```
 
 ## Cooperative Multitasking Strategy
@@ -117,99 +133,105 @@ This document describes the design approach for the One-Wire Temperature Manager
 
 ### Implementation Pattern
 
+**Using Official Espressif Component**:
+
 ```c
+// Initialization (in onewire_temp_manager_init())
+onewire_bus_config_t bus_config = {
+    .gpio_pin = PIN_ONEWIRE_TEMP,  // GPIO6
+};
+onewire_bus_t *bus = NULL;
+onewire_new_bus_rmt(&bus_config, &bus);  // RMT-based hardware timing
+
+onewire_device_t devices[ONEWIRE_MAX_SENSORS];
+uint8_t num_sensors = 0;
+onewire_search_devices(bus, devices, ONEWIRE_MAX_SENSORS, &num_sensors);
+
+// Task implementation (vOneWireTempManagerTask)
 void vOneWireTempManagerTask(void *pvParameters) {
-    // Initialize One-Wire bus and scan for devices
-    onewire_init(GPIO_NUM_6);
-    onewire_scan_devices();  // Discover all DS18B20 sensors
-    
     const TickType_t xTaskInterval = pdMS_TO_TICKS(5000);
-    const TickType_t xYieldBetweenSensors = pdMS_TO_TICKS(20);  // Small yield between sensors
+    const TickType_t xYieldBetweenSensors = pdMS_TO_TICKS(20);
     
     for (;;) {
         uint32_t cycle_start = xTaskGetTickCount();
         
         // Read all sensors sequentially within one cycle
         for (uint8_t sensor_index = 0; sensor_index < num_sensors; sensor_index++) {
-            uint32_t sensor_start = xTaskGetTickCount();
+            float temp_fahrenheit = 0.0f;
+            esp_err_t ret = ds18b20_read_temperature(&devices[sensor_index], &temp_fahrenheit);
             
-            // Step 1: Request temperature conversion
-            onewire_reset();
-            onewire_select(rom_codes[sensor_index]);
-            onewire_write(0x44);  // CONVERT_T command
-            // Conversion starts - sensor is now busy
-            
-            // Wait for conversion (750ms) - no yield here, conversion is hardware process
-            vTaskDelay(pdMS_TO_TICKS(750));
-            
-            // Step 2: Read temperature from scratchpad
-            onewire_reset();
-            onewire_select(rom_codes[sensor_index]);
-            onewire_write(0xBE);  // READ_SCRATCHPAD
-            
-            uint8_t scratchpad[9];
-            for (int i = 0; i < 9; i++) {
-                scratchpad[i] = onewire_read();
-            }
-            
-            // Verify CRC
-            if (onewire_crc8(scratchpad, 8) == scratchpad[8]) {
-                // Convert to temperature
-                int16_t raw_temp = (scratchpad[1] << 8) | scratchpad[0];
-                float temp_celsius = raw_temp / 16.0;
-                float temp_fahrenheit = (temp_celsius * 9.0 / 5.0) + 32.0;
-                
+            if (ret == ESP_OK) {
                 // Update genericSens_ (mutex-protected)
                 if (xSemaphoreTake(sensor_data.mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
                     switch (sensor_index) {
                         case 0:
-                            genericSens_.temp1 = (int)temp_fahrenheit;
-                            memcpy(&genericSens_.temp1_f, &temp_fahrenheit, sizeof(float));
+                            genericSens_.generic.temp1 = (int32_t)temp_fahrenheit;
+                            memcpy(&genericSens_.generic.temp1_f, &temp_fahrenheit, sizeof(float));
                             break;
                         case 1:
-                            genericSens_.temp2 = temp_fahrenheit;
+                            genericSens_.generic.temp2 = temp_fahrenheit;
                             break;
                         case 2:
-                            genericSens_.temp3 = temp_fahrenheit;
+                            genericSens_.generic.temp3 = temp_fahrenheit;
                             break;
                         case 3:
-                            genericSens_.temp4 = temp_fahrenheit;
+                            genericSens_.generic.temp4 = temp_fahrenheit;
                             break;
                     }
                     xSemaphoreGive(sensor_data.mutex);
                 }
-            } else {
-                ESP_LOGW(TAG, "CRC error reading sensor %d", sensor_index);
             }
             
-            // Monitor per-sensor read time
-            uint32_t sensor_elapsed = (xTaskGetTickCount() - sensor_start) * portTICK_PERIOD_MS;
-            if (sensor_elapsed > 1000) {
-                ESP_LOGW(TAG, "Sensor %d read took %lu ms", sensor_index, sensor_elapsed);
-            }
-            
-            // YIELD POINT: Small yield between sensors (except after last sensor)
-            // Allows other same-priority tasks brief execution window
+            // YIELD POINT: Small yield between sensors
             if (sensor_index < num_sensors - 1) {
-                vTaskDelay(xYieldBetweenSensors);  // 20ms yield
+                vTaskDelay(xYieldBetweenSensors);
             }
+            
+            watchdog_task_heartbeat();
         }
         
-        // Calculate total cycle time
-        uint32_t cycle_elapsed = (xTaskGetTickCount() - cycle_start) * portTICK_PERIOD_MS;
-        if (cycle_elapsed > 5000) {
-            ESP_LOGW(TAG, "Complete cycle exceeded interval: %lu ms", cycle_elapsed);
-        }
-        
-        // Send watchdog heartbeat
+        // Signal completion and delay until next cycle
+        sensor_coordination_signal_completion(SENSOR_EVENT_TEMP_COMPLETE);
         watchdog_task_heartbeat();
-        
-        // YIELD POINT: Main task delay until next cycle
-        // This is the primary yield - allows all other tasks to execute
         vTaskDelay(xTaskInterval);
     }
 }
+
+// Helper function: Read temperature from DS18B20
+static esp_err_t ds18b20_read_temperature(onewire_device_t *device, float *temp_fahrenheit) {
+    // Select device and start conversion
+    onewire_select_device(bus, device);
+    onewire_write_byte(bus, 0x44);  // CONVERT_T
+    
+    vTaskDelay(pdMS_TO_TICKS(750));  // Wait for conversion
+    
+    // Reset and read scratchpad
+    onewire_reset(bus);
+    onewire_select_device(bus, device);
+    onewire_write_byte(bus, 0xBE);  // READ_SCRATCHPAD
+    
+    uint8_t scratchpad[9];
+    for (int i = 0; i < 9; i++) {
+        scratchpad[i] = onewire_read_byte(bus);
+    }
+    
+    // Verify CRC and convert
+    if (onewire_crc8(scratchpad, 8) == scratchpad[8]) {
+        int16_t raw_temp = (scratchpad[1] << 8) | scratchpad[0];
+        float temp_celsius = raw_temp / 16.0f;
+        *temp_fahrenheit = (temp_celsius * 9.0f / 5.0f) + 32.0f;
+        return ESP_OK;
+    }
+    return ESP_FAIL;
+}
 ```
+
+**Key Differences from Bit-Banging**:
+- No manual GPIO control - component handles all GPIO operations
+- No interrupt disabling - RMT handles timing in hardware
+- Simpler API - just call component functions
+- More reliable - hardware timing is precise
+- Less code - ~300 lines vs ~400+ with bit-banging
 
 ## Timing Analysis
 
@@ -282,7 +304,7 @@ Cycle (0-5000ms):
 - MQTT Publisher (Priority 3)
 - Sensor Acquisition (Priority 5)
 
-**Behavior**: These tasks can preempt One-Wire task at any time. One-Wire reads can be interrupted, but this is acceptable since One-Wire protocol handles interruptions gracefully (reset and retry).
+**Behavior**: These tasks can preempt One-Wire task at any time. One-Wire reads can be interrupted, but this is acceptable since the official component handles interruptions gracefully (reset and retry).
 
 ### Same Priority Tasks (Affected)
 
@@ -456,6 +478,32 @@ if (stack_remaining < 512) {
 }
 ```
 
+## Component Setup
+
+### Adding the Component Dependency
+
+Before building, add the official component:
+
+```bash
+cd /path/to/SensorX
+idf.py add-dependency "espressif/onewire_bus^1.0.4"
+```
+
+This downloads the component from ESP Component Registry and makes it available to the project.
+
+### CMakeLists.txt Configuration
+
+The component is automatically linked via:
+
+```cmake
+idf_component_register(
+    ...
+    REQUIRES ... onewire_bus
+)
+```
+
+No additional configuration needed - the component handles RMT setup automatically.
+
 ## Configuration
 
 ### Timing Constants
@@ -463,49 +511,63 @@ if (stack_remaining < 512) {
 **Configuration in `config.h`**:
 ```c
 #define ONEWIRE_TEMP_TASK_INTERVAL_MS    5000   // Task execution interval (complete scan)
-#define ONEWIRE_CONVERSION_DELAY_MS     750    // DS18B20 conversion time per sensor
-#define ONEWIRE_YIELD_BETWEEN_MS        20     // Yield between sensors (minimal)
-#define ONEWIRE_READ_TIMEOUT_MS         1000   // Maximum read time per sensor
-#define ONEWIRE_CYCLE_TIMEOUT_MS        4500   // Maximum cycle time (safety margin)
+#define ONEWIRE_CONVERSION_DELAY_MS      750    // DS18B20 conversion time per sensor
+#define ONEWIRE_YIELD_BETWEEN_MS         20     // Yield between sensors (minimal)
+#define ONEWIRE_READ_TIMEOUT_MS          1000   // Maximum read time per sensor
+#define ONEWIRE_CYCLE_TIMEOUT_MS         4500   // Maximum cycle time (safety margin)
+#define ONEWIRE_MAX_SENSORS              4      // Maximum sensors supported
 ```
+
+**Note**: GPIO pin is defined in `pins.h` as `PIN_ONEWIRE_TEMP` (GPIO_NUM_6).
 
 ### GPIO Configuration
 
+**Component Handles GPIO**: The `onewire_bus` component automatically configures the GPIO pin. No manual GPIO setup required.
+
 **Pin Selection**:
 ```c
-#define ONEWIRE_PIN                     GPIO_NUM_6  // One-Wire bus pin
+#define PIN_ONEWIRE_TEMP GPIO_NUM_6  // Defined in pins.h
 ```
 
-**GPIO Setup**:
+**Component Initialization**:
 ```c
-gpio_config_t ow_config = {
-    .pin_bit_mask = (1ULL << ONEWIRE_PIN),
-    .mode = GPIO_MODE_INPUT_OUTPUT_OD,  // Open-drain mode
-    .pull_up_en = GPIO_PULLUP_ENABLE,   // Enable internal pull-up (or external)
-    .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    .intr_type = GPIO_INTR_DISABLE
+onewire_bus_config_t bus_config = {
+    .gpio_pin = PIN_ONEWIRE_TEMP,  // GPIO6
 };
-ESP_ERROR_CHECK(gpio_config(&ow_config));
+onewire_bus_t *bus = NULL;
+onewire_new_bus_rmt(&bus_config, &bus);  // Component configures GPIO automatically
 ```
+
+**Note**: The component uses RMT peripheral for timing, so GPIO is configured for RMT use automatically. Pull-up resistor (4.7kΩ) must still be provided externally.
 
 ## Integration Points
 
 ### Dependencies
 
-1. **GPIO Driver**: One-Wire protocol uses GPIO for bit-banging
-2. **Sensor Data Structure**: Updates `genericSens_.temp1` through `temp4`
-3. **Mutex**: Protects `genericSens_` structure access
-4. **Watchdog**: Task monitoring and protection
+1. **Official One-Wire Component**: `espressif/onewire_bus` (ESP Component Registry)
+   - Provides RMT-based hardware timing
+   - Handles all protocol operations
+   - Added via: `idf.py add-dependency "espressif/onewire_bus^1.0.4"`
+   
+2. **RMT Peripheral**: Used by onewire_bus component for timing
+   - Hardware-based, no CPU load
+   - Precise timing without interrupts
+   
+3. **Sensor Data Structure**: Updates `genericSens_.temp1` through `temp4`
+4. **Mutex**: Protects `genericSens_` structure access
+5. **Watchdog**: Task monitoring and protection
 
 ### Initialization Order
 
 ```
-1. Initialize GPIO system
-2. Initialize sensor data structure with mutex
-3. Initialize One-Wire GPIO pin
-4. Scan One-Wire bus for devices
-5. Create One-Wire Manager task
-6. Task registers with watchdog
+1. Initialize sensor data structure with mutex (sensor_coordination_init)
+2. Initialize One-Wire Temperature Manager (onewire_temp_manager_init)
+   a. Component initializes RMT and GPIO automatically
+   b. Scan bus for DS18B20 devices (onewire_search_devices)
+   c. Store device handles for discovered sensors
+   d. Create One-Wire Manager task (xTaskCreate)
+3. Task registers with watchdog (watchdog_register_current_task)
+4. Task starts reading sensors every 5000ms
 ```
 
 ## Testing Considerations
@@ -568,18 +630,22 @@ ESP_ERROR_CHECK(gpio_config(&ow_config));
 
 The One-Wire Temperature Manager design:
 
+- ✅ **Official Component**: Uses Espressif `onewire_bus` component (RMT-based hardware timing)
 - ✅ **Complete Scan**: Reads all 4 sensors within one 5000ms cycle
 - ✅ **Minimal Yields**: Small yields (20ms) between sensors - just 1.2% overhead
 - ✅ **Non-Blocking**: Allows other same-priority tasks brief execution windows
 - ✅ **Efficient**: Total cycle time ~3.54 seconds (well within 5000ms budget)
 - ✅ **Protected**: Watchdog and timeout protection
 - ✅ **Reliable**: Error handling and retry logic
+- ✅ **Hardware-Based**: RMT peripheral handles timing (no CPU load, no interrupts disabled)
 
-**Key Design Decision**: Reading all sensors in one cycle with minimal yields (20ms) between sensors ensures:
-- All sensors updated every 5 seconds
-- Other same-priority tasks can execute during yield windows
-- Complete cycle completes within allocated time
-- Minimal CPU overhead (60ms yields out of 5000ms = 1.2%)
+**Key Design Decision**: Using the official Espressif `onewire_bus` component provides:
+- Hardware-based timing via RMT peripheral
+- No CPU load during protocol operations
+- No interrupt disabling needed
+- Simpler code (~300 lines vs ~400+ with bit-banging)
+- Better reliability (hardware timing is precise)
+- Easier maintenance (Espressif maintains protocol code)
 
 **Timing Breakdown**:
 - Sensor reads: ~850ms × 4 = 3400ms
@@ -587,5 +653,12 @@ The One-Wire Temperature Manager design:
 - Other overhead: ~80ms
 - **Total**: ~3540ms (well within 5000ms interval)
 
-This approach provides efficient temperature monitoring while maintaining system responsiveness and ensuring all sensors are updated every cycle.
+**Component Benefits**:
+- RMT peripheral handles all timing-critical operations
+- No manual GPIO bit-banging required
+- Automatic GPIO configuration
+- Built-in device discovery and ROM code management
+- CRC verification provided by component
+
+This approach provides efficient temperature monitoring while maintaining system responsiveness and ensuring all sensors are updated every cycle, with the added benefit of hardware-based reliability.
 

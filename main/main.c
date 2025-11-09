@@ -16,6 +16,9 @@
 #include "mqtt_publisher.h"     // From sensor_system component
 #include "sensor_coordination.h" // From sensor_system component
 #include "sensor.h"          // From sensor_system component
+#include "onewire_temp_manager.h" // From sensor_system component
+#include "pcnt_flow_manager.h" // From sensor_system component
+#include "pins.h"            // From sensor_system component - GPIO pin definitions
 
 static const char *TAG = "MAIN";
 
@@ -103,7 +106,44 @@ void app_main(void) {
     }
     ESP_LOGI(TAG, "Sensor coordination system initialized successfully");
 
-    // 5. Initialize I2C Manager (non-critical - continue if fails)
+    // 5. Initialize One-Wire Temperature Manager (Phase 2)
+    ret = onewire_temp_manager_init();
+    if (ret != ESP_OK) {
+        error_report(ERROR_NONE, ERROR_SEVERITY_WARNING, "app_main", NULL);
+        ESP_LOGW(TAG, "Failed to initialize One-Wire Temperature Manager: %s", esp_err_to_name(ret));
+        // Continue anyway - One-Wire sensors are not critical for basic operation
+    } else {
+        ESP_LOGI(TAG, "One-Wire Temperature Manager initialized successfully");
+    }
+
+    // 6. Initialize PCNT Flow Manager (Phase 3)
+    ret = pcnt_flow_manager_init();
+    if (ret != ESP_OK) {
+        error_report(ERROR_TASK_CREATION, ERROR_SEVERITY_CRITICAL, "app_main", NULL);
+        ESP_LOGE(TAG, "Failed to initialize PCNT Flow Manager: %s", esp_err_to_name(ret));
+        abort();
+    }
+    ESP_LOGI(TAG, "PCNT Flow Manager initialized successfully");
+    
+    // Register flow sensors
+    ret = pcnt_flow_manager_register_sensor(PIN_FLOW_SENSOR_1, "Flow1");
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to register Flow Sensor 1: %s", esp_err_to_name(ret));
+    }
+    
+    ret = pcnt_flow_manager_register_sensor(PIN_FLOW_SENSOR_2, "Flow2");
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to register Flow Sensor 2: %s", esp_err_to_name(ret));
+    }
+    
+    ret = pcnt_flow_manager_register_sensor(PIN_FLOW_SENSOR_3, "Flow3");
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to register Flow Sensor 3: %s", esp_err_to_name(ret));
+    }
+    
+    ESP_LOGI(TAG, "Registered %d flow sensor(s)", pcnt_flow_manager_get_sensor_count());
+
+    // 7. Initialize I2C Manager (non-critical - continue if fails)
     ret = i2c_manager_init();
     if (ret != ESP_OK) {
         error_report(ERROR_I2C_TIMEOUT, ERROR_SEVERITY_ERROR, "app_main", NULL);
@@ -113,7 +153,7 @@ void app_main(void) {
         ESP_LOGI(TAG, "I2C manager initialized successfully");
     }
 
-    // 6. Initialize MQTT Manager (after WiFi, non-critical - continue if fails)
+    // 8. Initialize MQTT Manager (after WiFi, non-critical - continue if fails)
     // Note: MQTT init requires WiFi to be connected, so we'll initialize it
     // after WiFi connection is established
     if (wifi_manager_is_connected()) {
@@ -137,7 +177,7 @@ void app_main(void) {
         ESP_LOGI(TAG, "WiFi not connected yet, MQTT initialization deferred");
     }
 
-    // 7. Create the system information task
+    // 8. Create the system information task
     BaseType_t xResult = xTaskCreate(
         vSystemInfoTask,              // Task function
         "SystemInfo",                 // Task name
@@ -154,7 +194,7 @@ void app_main(void) {
         ESP_LOGW(TAG, "WARNING: Failed to create system information task");
     }
 
-    // 8. Create the system monitoring task
+    // 9. Create the system monitoring task
     xResult = xTaskCreate(
         vSystemMonitorTask,           // Task function
         "SysMonitor",                 // Task name
@@ -174,7 +214,7 @@ void app_main(void) {
         abort();
     }
 
-    // 9. Create the heartbeat task
+    // 10. Create the heartbeat task
     xResult = xTaskCreate(
         vHeartbeatTask,               // Task function
         "Heartbeat",                  // Task name
@@ -193,7 +233,7 @@ void app_main(void) {
         ESP_LOGW(TAG, "WARNING: Failed to create heartbeat task");
     }
 
-    // 10. Create the sensor acquisition task (critical priority)
+    // 11. Create the sensor acquisition task (critical priority)
     xResult = xTaskCreate(
         vSensorAcquisitionTask,         // Task function
         "SensorAcq",                     // Task name
@@ -213,7 +253,7 @@ void app_main(void) {
         abort();
     }
 
-    // 11. Create the MQTT publisher task
+    // 12. Create the MQTT publisher task
     xResult = xTaskCreate(
         vMqttPublisherTask,              // Task function
         "MqttPub",                       // Task name

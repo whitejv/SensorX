@@ -9,5 +9,7 @@ idf_component_register(SRCS "src/system_init.c"
                             "src/mqtt_publisher.c"
                             "src/sensor.c"
                             "src/sensor_coordination.c"
+                            "src/onewire_temp_manager.c"
+                            "src/pcnt_flow_manager.c"
                        INCLUDE_DIRS "include"
-                       REQUIRES esp_hw_support driver esp_netif esp_event esp_wifi nvs_flash mqtt json)
+                       REQUIRES esp_hw_support driver esp_netif esp_event esp_wifi nvs_flash mqtt json onewire_bus)

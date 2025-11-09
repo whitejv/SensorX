@@ -70,6 +70,19 @@
 #define FAN_CONTROL_MUTEX_TIMEOUT_MS          100    // Mutex timeout for temperature read (ms)
 #define FAN_CONTROL_INTERVAL_MS               1000   // Fan control check interval (ms)
 
+// One-Wire Temperature Manager Constants
+#define ONEWIRE_CONVERSION_DELAY_MS     750    // DS18B20 conversion time per sensor
+#define ONEWIRE_YIELD_BETWEEN_MS        20     // Yield between sensors (minimal)
+#define ONEWIRE_READ_TIMEOUT_MS         1000   // Maximum read time per sensor
+#define ONEWIRE_CYCLE_TIMEOUT_MS        4500   // Maximum cycle time (safety margin)
+#define ONEWIRE_MAX_SENSORS             4      // Maximum sensors supported
+
+// PCNT Flow Manager Constants
+#define FLOW_ACCUMULATION_WINDOW_MS     2000   // User-defined accumulation window (ms)
+#define PCNT_COUNTER_LIMIT              4095   // 12-bit limit (matches FlowData structure)
+#define PCNT_FILTER_THRESHOLD           1023   // Filter threshold (APB clock cycles, ~12.8μs at 80MHz)
+#define MAX_FLOW_SENSORS                3      // Maximum flow sensors supported
+
 // Sensor Data Display
 #define SENSOR_DATA_VERBOSE_ENABLED        1   // Enable verbose sensor data output (0=disabled, 1=enabled)
 #define SENSOR_DATA_VERBOSE_INTERVAL_MS    1000  // Print interval in milliseconds

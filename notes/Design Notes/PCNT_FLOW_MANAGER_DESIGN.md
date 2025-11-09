@@ -160,10 +160,10 @@ gpio_config(&gpio_conf);
 ```
 
 **GPIO Pin Selection**:
-- Flow Sensor 1: GPIO pin (to be determined)
-- Flow Sensor 2: GPIO pin (to be determined)
-- Flow Sensor 3: GPIO pin (to be determined)
-- Note: Check pin conflicts with other peripherals
+- Flow Sensor 1: GPIO7 (PCNT_UNIT_0)
+- Flow Sensor 2: GPIO8 (PCNT_UNIT_1)
+- Flow Sensor 3: GPIO3 (PCNT_UNIT_2)
+- Note: All pins are digital-capable. GPIO3 is ADC-capable but used as digital for PCNT.
 
 ## Pulse Count Read Strategy
 
@@ -642,11 +642,11 @@ watchdog_register_current_task("PcntFlowMgr", 1500);
 
 ### GPIO Pin Definitions
 
-**Pin Selection** (to be configured):
+**Pin Selection**:
 ```c
-#define FLOW_SENSOR_1_GPIO    GPIO_NUM_X  // To be determined
-#define FLOW_SENSOR_2_GPIO    GPIO_NUM_Y  // To be determined
-#define FLOW_SENSOR_3_GPIO    GPIO_NUM_Z  // To be determined
+#define FLOW_SENSOR_1_GPIO    GPIO_NUM_7   // GPIO7 - PCNT Flow Sensor 1
+#define FLOW_SENSOR_2_GPIO    GPIO_NUM_8   // GPIO8 - PCNT Flow Sensor 2
+#define FLOW_SENSOR_3_GPIO    GPIO_NUM_3   // GPIO3 - PCNT Flow Sensor 3
 ```
 
 ### PCNT Unit Assignments

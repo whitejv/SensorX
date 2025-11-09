@@ -112,7 +112,7 @@
 // PCNT Flow Sensor Pins (Hall effect flow sensors - pulse counting)
 #define PIN_FLOW_SENSOR_1   GPIO_NUM_7   // GPIO7 - PCNT Flow Sensor 1 (PCNT_UNIT_0)
 #define PIN_FLOW_SENSOR_2   GPIO_NUM_8   // GPIO8 - PCNT Flow Sensor 2 (PCNT_UNIT_1)
-#define PIN_FLOW_SENSOR_3   GPIO_NUM_11  // GPIO11 - PCNT Flow Sensor 3 (PCNT_UNIT_2)
+#define PIN_FLOW_SENSOR_3   GPIO_NUM_3   // GPIO3 - PCNT Flow Sensor 3 (PCNT_UNIT_2)
 
 // One-Wire Temperature Sensor Pin (DS18B20 sensors on shared bus)
 #define PIN_ONEWIRE_TEMP    GPIO_NUM_6   // GPIO6 - One-Wire bus for DS18B20 sensors
@@ -151,7 +151,7 @@
 // - GPIO0: Assigned as Discrete Input 1, also ADC1_CH0 (but not Arduino "A0")
 // - GPIO1: Assigned as Discrete Input 2, Arduino "A0" and "1", can be analog or digital
 // - GPIO2: Assigned as Discrete Input 3, Arduino "A5" and "2", can be analog or digital
-// - GPIO3: Available as digital IO3, also ADC1_CH3 (Arduino "A4")
+// - GPIO3: Assigned as PCNT Flow Sensor 3, Arduino "3", also ADC1_CH3 (Arduino "A4"), can be analog or digital
 // - GPIO4: Available as digital IO4, also ADC1_CH4 (Arduino "A1")
 // - GPIO5: Available as digital IO5, also ADC1_CH5 (Arduino "A3")
 // - GPIO6: Assigned as One-Wire Temperature bus, Arduino "A2" and "6", can be analog or digital
@@ -159,7 +159,7 @@
 // - GPIO8: Assigned as PCNT Flow Sensor 2, Digital IO8
 // - GPIO9: Shared between NeoPixel, Boot button, and Digital IO9 (available if unused)
 // - GPIO10: Shared between SPI CS and Digital IO10 (available if SPI unused)
-// - GPIO11: Assigned as PCNT Flow Sensor 3, Digital IO11
+// - GPIO11: Digital IO11 (available - not exposed on Feather pinout)
 // - GPIO12: RESERVED for JTAG TDI - DO NOT USE for other functions
 // - GPIO13: RESERVED for JTAG TDO - DO NOT USE for other functions
 // - GPIO14: RESERVED for JTAG TCK - DO NOT USE for other functions
@@ -182,7 +182,7 @@
 // | 0    | Discrete Input 1          | Assigned    | ADC-capable                  |
 // | 1    | Discrete Input 2          | Assigned    | ADC-capable                  |
 // | 2    | Discrete Input 3          | Assigned    | ADC-capable                  |
-// | 3    | Available                | Free        | ADC-capable                  |
+// | 3    | PCNT Flow Sensor 3        | Assigned    | ADC-capable                  |
 // | 4    | Available                | Free        | ADC-capable                  |
 // | 5    | Available                | Free        | ADC-capable                  |
 // | 6    | One-Wire Temperature      | Assigned    | ADC-capable                  |
@@ -190,7 +190,7 @@
 // | 8    | PCNT Flow Sensor 2        | Assigned    | Digital only                 |
 // | 9    | Boot/NeoPixel             | Shared      | Available if unused          |
 // | 10   | SPI CS                   | Shared      | Available if SPI unused       |
-// | 11   | PCNT Flow Sensor 3        | Assigned    | Digital only                 |
+// | 11   | Not Available            | N/A         | Not exposed on Feather        |
 // | 12   | JTAG TDI                 | Reserved    | DO NOT USE                   |
 // | 13   | JTAG TDO                 | Reserved    | DO NOT USE                   |
 // | 14   | JTAG TCK                 | Reserved    | DO NOT USE                   |
@@ -206,13 +206,14 @@
 //
 // Summary Statistics:
 // - Total GPIO pins (0-23): 24 pins
-// - Assigned for sensors/I/O: 9 pins (GPIO0, 1, 2, 6, 7, 8, 11, 20, 21)
+// - Assigned for sensors/I/O: 9 pins (GPIO0, 1, 2, 3, 6, 7, 8, 20, 21)
 // - Reserved for critical functions: 6 pins (GPIO12-15 JTAG, GPIO18-19 I2C)
-// - Available for future use: 9 pins (GPIO3, 4, 5, 9, 10, 16, 17, 22, 23)
+// - Available for future use: 8 pins (GPIO4, 5, 9, 10, 16, 17, 22, 23)
 // - Shared/conflict pins: 5 pins (GPIO9, GPIO16-17 UART, GPIO22-23 SPI)
 //
 // Notes:
-// - GPIO3-5: Fully available ADC-capable pins for future analog sensors or digital I/O
+// - GPIO3: Assigned for PCNT Flow Sensor 3 (ADC-capable but used as digital)
+// - GPIO4-5: Fully available ADC-capable pins for future analog sensors or digital I/O
 // - GPIO9: Available if NeoPixel not used; boot button conflict only during reset
 // - GPIO10, 22-23: Available if SPI not needed; otherwise reserved for SPI
 // - GPIO16-17: Reserved for UART TX/RX if UART needed externally
