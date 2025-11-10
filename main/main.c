@@ -18,6 +18,8 @@
 #include "sensor.h"          // From sensor_system component
 #include "onewire_temp_manager.h" // From sensor_system component
 #include "pcnt_flow_manager.h" // From sensor_system component
+#include "i2c_adc_manager.h" // From sensor_system component
+#include "i2c_gpio_manager.h" // From sensor_system component
 #include "pins.h"            // From sensor_system component - GPIO pin definitions
 
 static const char *TAG = "MAIN";
@@ -151,6 +153,53 @@ void app_main(void) {
         // Continue anyway - some sensors may not be critical
     } else {
         ESP_LOGI(TAG, "I2C manager initialized successfully");
+        
+        // Initialize I2C ADC Manager (Phase 5)
+        ret = i2c_adc_manager_init();
+        if (ret != ESP_OK) {
+            error_report(ERROR_NONE, ERROR_SEVERITY_WARNING, "app_main", NULL);
+            ESP_LOGW(TAG, "Failed to initialize I2C ADC Manager: %s", esp_err_to_name(ret));
+            // Continue anyway - ADC devices are optional
+        } else {
+            ESP_LOGI(TAG, "I2C ADC Manager initialized successfully");
+            
+            // Register ADS1015 (12-bit ADC at 0x48)
+            ret = i2c_adc_manager_register_device(ADS1015_I2C_ADDRESS, false);
+            if (ret != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to register ADS1015: %s", esp_err_to_name(ret));
+                // Continue - device may not be present
+            }
+            
+            // Register ADS1115 (16-bit ADC at 0x49)
+            ret = i2c_adc_manager_register_device(ADS1115_I2C_ADDRESS, true);
+            if (ret != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to register ADS1115: %s", esp_err_to_name(ret));
+                // Continue - device may not be present
+            }
+            
+            ESP_LOGI(TAG, "Registered %d ADC device(s)", i2c_adc_manager_get_device_count());
+        }
+        
+        // Initialize I2C GPIO Manager (Phase 4)
+        ret = i2c_gpio_manager_init();
+        if (ret != ESP_OK) {
+            error_report(ERROR_NONE, ERROR_SEVERITY_WARNING, "app_main", NULL);
+            ESP_LOGW(TAG, "Failed to initialize I2C GPIO Manager: %s", esp_err_to_name(ret));
+            // Continue anyway - GPIO expander is optional
+        } else {
+            ESP_LOGI(TAG, "I2C GPIO Manager initialized successfully");
+            
+            // Register MCP23017 GPIO expander (at 0x20)
+            ret = i2c_gpio_manager_register_expander(MCP23017_I2C_ADDRESS);
+            if (ret != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to register MCP23017 GPIO expander: %s", esp_err_to_name(ret));
+                // Continue - device may not be present
+            } else {
+                ESP_LOGI(TAG, "Registered MCP23017 GPIO expander");
+            }
+            
+            ESP_LOGI(TAG, "Registered %d GPIO expander(s)", i2c_gpio_manager_get_device_count());
+        }
     }
 
     // 8. Initialize MQTT Manager (after WiFi, non-critical - continue if fails)

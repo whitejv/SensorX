@@ -159,8 +159,12 @@
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/wifi_provisioning/libwifi_provisioning.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/json/libjson.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espressif__onewire_bus/libespressif__onewire_bus.a
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__logger/libespp__logger.a
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__logger/libespp__logger.a
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__ads1x15/libespp__ads1x15.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/sensor_system/libsensor_system.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/mqtt/libmqtt.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espressif__onewire_bus/libespressif__onewire_bus.a
+/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__ads1x15/libespp__ads1x15.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/main/libmain.a
 /Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/sensor_system/libsensor_system.a

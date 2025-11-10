@@ -564,6 +564,31 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
+  include("/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__format/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__logger/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__base_component/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__base_peripheral/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__ads1x15/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
   include("/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/sensor_system/cmake_install.cmake")
 endif()
 

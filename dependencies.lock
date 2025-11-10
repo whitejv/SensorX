@@ -1,4 +1,70 @@
 dependencies:
+  espp/ads1x15:
+    component_hash: ad0e82a5c031118aed6a2a5d59194b02ccce39b9441f9549761a944b37adbee4
+    dependencies:
+    - name: espp/base_peripheral
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=1.0'
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.30
+  espp/base_component:
+    component_hash: 4eb622f2705843fc76215d51d834ee7297522e883378e706a998d4fa6e49f231
+    dependencies:
+    - name: espp/logger
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=1.0'
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.0.30
+  espp/base_peripheral:
+    component_hash: d852ab634677571e03f7ab3e871260601c33d46b00c59c56f1361a764734fff6
+    dependencies:
+    - name: espp/base_component
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=1.0'
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.0.30
+  espp/format:
+    component_hash: a36e56d8620d28997f37a41f005bd0af70ccf025f38320738f148e2c9579f2f1
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.0.30
+  espp/logger:
+    component_hash: 8e6fc4cb3ff9feabd726a5c6fa6465b3fafc704b7c8b283232f9bf98fa517bd8
+    dependencies:
+    - name: espp/format
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=1.0'
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.0.30
   espressif/onewire_bus:
     component_hash: 11729fd9a5de80225177a61e9cd77de91683b8ec300e83710d5327b666dbe884
     dependencies:
@@ -14,8 +80,9 @@ dependencies:
       type: idf
     version: 5.5.1
 direct_dependencies:
+- espp/ads1x15
 - espressif/onewire_bus
 - idf
-manifest_hash: 63f8022a361e88d857eca514e4f55800f027058f5e5e9a2513877503ac484a14
+manifest_hash: 5670507c20152644c29ee9af9e0b5ee384c571e4e1aae13db2c1abb476e95896
 target: esp32c6
 version: 2.0.0

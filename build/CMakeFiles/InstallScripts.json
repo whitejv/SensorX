@@ -120,6 +120,11 @@
 		"/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/usb/cmake_install.cmake",
 		"/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/wifi_provisioning/cmake_install.cmake",
 		"/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espressif__onewire_bus/cmake_install.cmake",
+		"/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__format/cmake_install.cmake",
+		"/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__logger/cmake_install.cmake",
+		"/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__base_component/cmake_install.cmake",
+		"/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__base_peripheral/cmake_install.cmake",
+		"/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/espp__ads1x15/cmake_install.cmake",
 		"/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/sensor_system/cmake_install.cmake",
 		"/Volumes/iHome/Users/dub/esp/SensorX/build/esp-idf/main/cmake_install.cmake"
 	],
