@@ -342,11 +342,9 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base,
         if (!mqtt_manager_is_connected()) {
             esp_err_t ret = mqtt_manager_init();
             if (ret == ESP_OK) {
-                ESP_LOGI(TAG, "MQTT manager initialized after WiFi connection");
+                // MQTT manager initialized - no log (only report errors)
                 ret = mqtt_manager_connect();
-                if (ret == ESP_OK) {
-                    ESP_LOGI(TAG, "MQTT connection initiated after WiFi connection");
-                } else {
+                if (ret != ESP_OK) {
                     ESP_LOGW(TAG, "Failed to connect MQTT after WiFi connection: %s", 
                              esp_err_to_name(ret));
                 }

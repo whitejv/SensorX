@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <driver/gpio.h>
+#include <cJSON.h>
 
 #if CONFIG_SPIRAM
 #include <esp_spiram.h>
@@ -135,7 +136,9 @@ void vSystemInfoTask(void *pvParameters) {
  * Intended for debugging and development until MQTT monitoring is available.
  * 
  * Should be called once per second from a task or timer.
+ * Only compiled when VERBOSE=1.
  */
+#if VERBOSE
 static void print_sensor_data_verbose(void) {
     FlowData_t flow1, flow2, flow3;
     
@@ -223,6 +226,7 @@ static void print_sensor_data_verbose(void) {
     // Release mutex
     xSemaphoreGive(sensor_data.mutex);
 }
+#endif // VERBOSE
 
 void vSystemMonitorTask(void *pvParameters) {
     (void)pvParameters;  // Unused parameter
@@ -333,7 +337,7 @@ void vSystemMonitorTask(void *pvParameters) {
         // ============================================================================
         // Verbose Sensor Data Display (every SENSOR_DATA_VERBOSE_INTERVAL_MS)
         // ============================================================================
-#if SENSOR_DATA_VERBOSE_ENABLED
+#if VERBOSE
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
         if (now - last_sensor_print >= SENSOR_DATA_VERBOSE_INTERVAL_MS) {
             print_sensor_data_verbose();
@@ -456,29 +460,9 @@ void vSystemMonitorTask(void *pvParameters) {
         MQTTStatus_t mqtt_status = mqtt_manager_get_status();
         bool mqtt_connected = mqtt_manager_is_connected();
         
-        if (mqtt_connected) {
-            char mqtt_ip[16];
-            MQTTStats_t mqtt_stats;
-            mqtt_manager_get_stats(&mqtt_stats);
-            
-            if (mqtt_manager_get_broker_ip(mqtt_ip, sizeof(mqtt_ip)) == ESP_OK) {
-                ESP_LOGI(TAG, "MQTT: Connected | Broker: %s (%s) | Pub: %lu/%lu (ok/fail)",
-                         mqtt_ip, mqtt_stats.connectedToProd ? "PROD" : "DEV",
-                         mqtt_stats.publishSuccess, mqtt_stats.publishFailures);
-            } else {
-                ESP_LOGI(TAG, "MQTT: Connected | Pub: %lu/%lu (ok/fail)",
-                         mqtt_stats.publishSuccess, mqtt_stats.publishFailures);
-            }
-        } else {
-            const char* mqtt_status_str = "Unknown";
-            switch (mqtt_status) {
-                case MQTT_STATUS_DISCONNECTED: mqtt_status_str = "Disconnected"; break;
-                case MQTT_STATUS_CONNECTING: mqtt_status_str = "Connecting"; break;
-                case MQTT_STATUS_RECONNECTING: mqtt_status_str = "Reconnecting"; break;
-                case MQTT_STATUS_ERROR: mqtt_status_str = "Error"; break;
-                default: mqtt_status_str = "Unknown"; break;
-            }
-            ESP_LOGI(TAG, "MQTT: %s", mqtt_status_str);
+        // MQTT status - only report errors (no log for normal operation)
+        if (!mqtt_connected && mqtt_status == MQTT_STATUS_ERROR) {
+            ESP_LOGE(TAG, "MQTT: Error state detected");
         }
 
             // Get I2C status (cache results to avoid scanning every cycle)
@@ -553,6 +537,152 @@ void vSystemMonitorTask(void *pvParameters) {
             } else {
                 ESP_LOGI(TAG, "Fan: %s | Temp: N/A | Threshold: N/A",
                          fan_state ? "ON" : "OFF");
+            }
+
+            // Publish system monitor message to MQTT (every 5 seconds)
+            if (mqtt_connected && wifi_connected) {
+                cJSON *json = cJSON_CreateObject();
+                if (json != NULL) {
+                    // System status
+                    cJSON_AddNumberToObject(json, "uptime_sec", uptimeSeconds);
+                    cJSON_AddNumberToObject(json, "free_heap", currentHeapFree);
+                    cJSON_AddNumberToObject(json, "min_free_heap", minHeapFree);
+                    cJSON_AddNumberToObject(json, "active_tasks", currentTaskCount);
+                    
+                    // WiFi status
+                    if (wifi_connected) {
+                        char ip_str[16];
+                        int8_t rssi = wifi_manager_get_rssi();
+                        WiFiStats_t wifi_stats;
+                        wifi_manager_get_stats(&wifi_stats);
+                        
+                        cJSON *wifi_json = cJSON_CreateObject();
+                        if (wifi_json != NULL) {
+                            if (wifi_manager_get_ip_address(ip_str, sizeof(ip_str)) == ESP_OK) {
+                                cJSON_AddStringToObject(wifi_json, "ip", ip_str);
+                            }
+                            cJSON_AddNumberToObject(wifi_json, "rssi", rssi);
+                            cJSON_AddNumberToObject(wifi_json, "uptime_sec", wifi_stats.uptime);
+                            cJSON_AddStringToObject(wifi_json, "status", "connected");
+                            cJSON_AddItemToObject(json, "wifi", wifi_json);
+                        }
+                    } else {
+                        cJSON *wifi_json = cJSON_CreateObject();
+                        if (wifi_json != NULL) {
+                            cJSON_AddStringToObject(wifi_json, "status", "disconnected");
+                            cJSON_AddItemToObject(json, "wifi", wifi_json);
+                        }
+                    }
+                    
+                    // MQTT status
+                    if (mqtt_connected) {
+                        char mqtt_ip[16];
+                        MQTTStats_t mqtt_stats;
+                        mqtt_manager_get_stats(&mqtt_stats);
+                        
+                        cJSON *mqtt_json = cJSON_CreateObject();
+                        if (mqtt_json != NULL) {
+                            if (mqtt_manager_get_broker_ip(mqtt_ip, sizeof(mqtt_ip)) == ESP_OK) {
+                                cJSON_AddStringToObject(mqtt_json, "broker_ip", mqtt_ip);
+                            }
+                            cJSON_AddBoolToObject(mqtt_json, "connected_to_prod", mqtt_stats.connectedToProd);
+                            cJSON_AddNumberToObject(mqtt_json, "publish_success", mqtt_stats.publishSuccess);
+                            cJSON_AddNumberToObject(mqtt_json, "publish_failures", mqtt_stats.publishFailures);
+                            cJSON_AddStringToObject(mqtt_json, "status", "connected");
+                            cJSON_AddItemToObject(json, "mqtt", mqtt_json);
+                        }
+                    } else {
+                        cJSON *mqtt_json = cJSON_CreateObject();
+                        if (mqtt_json != NULL) {
+                            cJSON_AddStringToObject(mqtt_json, "status", "disconnected");
+                            cJSON_AddItemToObject(json, "mqtt", mqtt_json);
+                        }
+                    }
+                    
+                    // I2C devices
+                    if (i2c_manager_is_initialized() && cached_device_count > 0) {
+                        cJSON *i2c_json = cJSON_CreateObject();
+                        cJSON *devices_array = cJSON_CreateArray();
+                        if (i2c_json != NULL && devices_array != NULL) {
+                            for (size_t i = 0; i < cached_device_count; i++) {
+                                cJSON_AddItemToArray(devices_array, cJSON_CreateNumber(cached_i2c_addresses[i]));
+                            }
+                            cJSON_AddNumberToObject(i2c_json, "device_count", cached_device_count);
+                            cJSON_AddItemToObject(i2c_json, "devices", devices_array);
+                            cJSON_AddStringToObject(i2c_json, "status", "initialized");
+                            cJSON_AddItemToObject(json, "i2c", i2c_json);
+                        }
+                    }
+                    
+                    // Fan control status
+                    cJSON *fan_json = cJSON_CreateObject();
+                    if (fan_json != NULL) {
+                        cJSON_AddBoolToObject(fan_json, "on", fan_state);
+                        if (temp_valid) {
+                            cJSON_AddNumberToObject(fan_json, "temp_f", current_temp);
+                            cJSON_AddStringToObject(fan_json, "temp_source", using_fallback ? "die" : "ambient");
+                            float threshold_display = using_fallback ? FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F : FAN_CONTROL_THRESHOLD_TEMP_F;
+                            cJSON_AddNumberToObject(fan_json, "threshold_f", threshold_display);
+                        } else {
+                            cJSON_AddNullToObject(fan_json, "temp_f");
+                            cJSON_AddStringToObject(fan_json, "temp_source", "none");
+                        }
+                        cJSON_AddItemToObject(json, "fan", fan_json);
+                    }
+                    
+                    // Error statistics
+                    ErrorRecoveryStats_t error_stats;
+                    error_recovery_get_stats(&error_stats);
+                    if (error_stats.total_errors > 0) {
+                        cJSON *error_json = cJSON_CreateObject();
+                        if (error_json != NULL) {
+                            cJSON_AddNumberToObject(error_json, "total", error_stats.total_errors);
+                            cJSON_AddNumberToObject(error_json, "recovered", error_stats.recovered_errors);
+                            cJSON_AddNumberToObject(error_json, "critical", error_stats.critical_errors);
+                            cJSON_AddItemToObject(json, "errors", error_json);
+                        }
+                    }
+                    
+                    // Watchdog statistics
+                    WatchdogStats_t wdt_stats;
+                    watchdog_get_stats(&wdt_stats);
+                    cJSON *wdt_json = cJSON_CreateObject();
+                    if (wdt_json != NULL) {
+                        cJSON_AddNumberToObject(wdt_json, "total_feeds", wdt_stats.totalFeeds);
+                        cJSON_AddNumberToObject(wdt_json, "timeouts", wdt_stats.timeoutCount);
+                        cJSON_AddNumberToObject(wdt_json, "tasks_monitored", wdt_stats.tasksMonitored);
+                        cJSON_AddItemToObject(json, "watchdog", wdt_json);
+                    }
+                    
+                    // Add timestamp
+                    cJSON_AddNumberToObject(json, "timestamp", currentTime);
+                    
+                    // Serialize and publish
+                    char *json_string = cJSON_Print(json);
+                    if (json_string != NULL) {
+                        esp_err_t ret = mqtt_manager_publish_json(
+                            MQTT_TOPIC_SYSTEM_MONITOR,
+                            json_string,
+                            MQTT_SYSTEM_MONITOR_QOS,
+                            false
+                        );
+                        if (ret == ESP_OK) {
+                            // System monitor message published successfully - no log (only report errors)
+                        } else {
+                            ESP_LOGW(TAG, "Failed to publish system monitor message: %s", esp_err_to_name(ret));
+                        }
+                        free(json_string);
+                    } else {
+                        ESP_LOGE(TAG, "Failed to serialize system monitor JSON");
+                    }
+                    
+                    cJSON_Delete(json);
+                } else {
+                    ESP_LOGE(TAG, "Failed to create system monitor JSON object");
+                }
+            } else {
+                ESP_LOGD(TAG, "Skipping system monitor MQTT publish - mqtt_connected=%d, wifi_connected=%d", 
+                         mqtt_connected, wifi_connected);
             }
         }
 

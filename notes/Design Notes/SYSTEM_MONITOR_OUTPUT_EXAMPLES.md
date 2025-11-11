@@ -10,7 +10,7 @@ I (5000) SYS_MONITOR: Active Tasks: 8
 I (5000) SYS_MONITOR: Watchdog: feeds=1234, timeouts=0, tasks=6
 I (5000) SYS_MONITOR: WiFi: Connected | IP: 192.168.1.100 | RSSI: -45 dBm | Uptime: 3600 sec
 I (5000) SYS_MONITOR: MQTT: Connected | Broker: 192.168.1.250 (PROD) | Pub: 3600/0 (ok/fail)
-I (5000) SYS_MONITOR: I2C: Initialized | Devices: 4 [0x20, 0x48, 0x77, 0x69]
+I (5000) SYS_MONITOR: I2C: Initialized | Devices: 3 [0x20, 0x48, 0x77]
 I (5000) SYS_MONITOR: --- Monitor Complete ---
 ```
 
@@ -29,7 +29,7 @@ I (5000) SYS_MONITOR: Active Tasks: 8
 I (5000) SYS_MONITOR: Watchdog: feeds=1234, timeouts=0, tasks=6
 I (5000) SYS_MONITOR: WiFi: Connected | IP: 192.168.1.100 | RSSI: -45 dBm | Uptime: 3600 sec
 I (5000) SYS_MONITOR: MQTT: Connected | Broker: 192.168.1.249 (DEV) | Pub: 3600/0 (ok/fail)
-I (5000) SYS_MONITOR: I2C: Initialized | Devices: 4 [0x20, 0x48, 0x77, 0x69]
+I (5000) SYS_MONITOR: I2C: Initialized | Devices: 3 [0x20, 0x48, 0x77]
 I (5000) SYS_MONITOR: --- Monitor Complete ---
 ```
 
@@ -45,7 +45,7 @@ I (5000) SYS_MONITOR: Active Tasks: 8
 I (5000) SYS_MONITOR: Watchdog: feeds=1234, timeouts=0, tasks=6
 I (5000) SYS_MONITOR: WiFi: Connected | IP: 192.168.1.100 | RSSI: -45 dBm | Uptime: 3600 sec
 I (5000) SYS_MONITOR: MQTT: Connecting
-I (5000) SYS_MONITOR: I2C: Initialized | Devices: 4 [0x20, 0x48, 0x77, 0x69]
+I (5000) SYS_MONITOR: I2C: Initialized | Devices: 3 [0x20, 0x48, 0x77]
 I (5000) SYS_MONITOR: --- Monitor Complete ---
 ```
 
@@ -93,7 +93,7 @@ I (5000) SYS_MONITOR: Active Tasks: 8
 I (5000) SYS_MONITOR: Watchdog: feeds=1234, timeouts=0, tasks=6
 I (5000) SYS_MONITOR: WiFi: Connected | IP: 192.168.1.100 | RSSI: -45 dBm | Uptime: 3600 sec
 I (5000) SYS_MONITOR: MQTT: Connected | Broker: 192.168.1.250 (PROD) | Pub: 3500/100 (ok/fail)
-I (5000) SYS_MONITOR: I2C: Initialized | Devices: 4 [0x20, 0x48, 0x77, 0x69]
+I (5000) SYS_MONITOR: I2C: Initialized | Devices: 3 [0x20, 0x48, 0x77]
 I (5000) SYS_MONITOR: --- Monitor Complete ---
 ```
 
@@ -109,17 +109,16 @@ I (5000) SYS_MONITOR: Active Tasks: 8
 I (5000) SYS_MONITOR: Watchdog: feeds=1234, timeouts=0, tasks=6
 I (5000) SYS_MONITOR: WiFi: Connected | IP: 192.168.1.100 | RSSI: -45 dBm | Uptime: 3600 sec
 I (5000) SYS_MONITOR: MQTT: Connected | Broker: 192.168.1.250 (PROD) | Pub: 3600/0 (ok/fail)
-I (5000) SYS_MONITOR: I2C: Initialized | Devices: 6 [0x20, 0x2A, 0x34, 0x48, 0x69, 0x77]
+I (5000) SYS_MONITOR: I2C: Initialized | Devices: 3 [0x20, 0x48, 0x77]
 I (5000) SYS_MONITOR: --- Monitor Complete ---
 ```
 
 **Device Addresses:**
 - `0x20` - GPIO Expander (MCP23X17)
-- `0x2A` - OpenLog datalogger
-- `0x34` - Qwiic Buzzer
-- `0x48` - ADS1115 (16-bit ADC)
-- `0x69` - RV1805 RTC
+- `0x48` - ADS1015/ADS1115 (12/16-bit ADC)
 - `0x77` - BME280 Environmental Sensor
+
+**Note**: Time synchronization uses ESP32-C6 built-in RTC with SNTP (no external I2C RTC device needed). OpenLog (0x2A) and Buzzer (0x34) are deferred - see FUTURE_UPGRADES.md
 
 ## Notes
 

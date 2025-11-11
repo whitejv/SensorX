@@ -747,14 +747,12 @@ xResult = xTaskCreate(
 
 #### 8.1 Logging Implementation
 
-**8.1.1 drivers/openlog_driver.h**
-- OpenLog SD card interface
-- Include guards: `#ifndef OPENLOG_DRIVER_H` / `#define OPENLOG_DRIVER_H` / `#endif`
-
-**8.1.2 drivers/openlog_driver.c**
-- SD card initialization
-- File creation and management
-- Error handling and recovery
+**8.1.1 Logging System - DEFERRED**
+- Logging system implementation deferred to future upgrade
+- See FUTURE_UPGRADES.md for implementation options:
+  - HTTP POST to local server (recommended)
+  - MQTT-based logging
+  - W25Q128 SPI flash storage
 
 **8.1.3 tasks/sd_logger.h**
 - SD logging task interface
@@ -791,26 +789,22 @@ xResult = xTaskCreate(
 - Performance metrics
 
 **9.1.3 utils/time_utils.h**
-- NTP and RTC utilities
+- Time and timestamp utilities
 - Include guards: `#ifndef TIME_UTILS_H` / `#define TIME_UTILS_H` / `#endif`
 
 **9.1.4 utils/time_utils.c**
-- NTP synchronization
-- RTC management
-- Timestamp generation
+- SNTP initialization and synchronization
+- Timestamp generation functions
+- Time formatting utilities
+- Uses ESP32-C6 built-in RTC synchronized with SNTP (no external I2C RTC needed)
 
-**9.1.5 drivers/rtc_driver.h**
-- RTC interface
-- Include guards: `#ifndef RTC_DRIVER_H` / `#define RTC_DRIVER_H` / `#endif`
-
-**9.1.6 drivers/rtc_driver.c**
-- RV1805 RTC driver
-- Time setting and reading
+**Note**: Logging system and Buzzer manager are deferred - see FUTURE_UPGRADES.md
 
 **Testing Criteria Phase 9:**
 - System monitoring reports accurate data
-- NTP sync works correctly
-- RTC maintains accurate time
+- SNTP sync works correctly after WiFi connects
+- Built-in RTC maintains accurate time
+- Timestamp functions work correctly
 - All tasks run stably
 - Memory usage optimized
 

@@ -10,8 +10,8 @@
 #define CONFIG_H
 
 // System identification
-#define FIRMWARE_VERSION_MAJOR    1
-#define FIRMWARE_VERSION_MINOR    0
+#define FIRMWARE_VERSION_MAJOR    2
+#define FIRMWARE_VERSION_MINOR    1
 #define FIRMWARE_NAME             "SensorX ESP32"
 
 // FreeRTOS task priorities (higher number = higher priority in ESP-IDF)
@@ -50,7 +50,7 @@
 #define PCNT_FLOW_TASK_INTERVAL_MS       1000  // Flow sensors (read every 1s, accumulate over 2s)
 #define I2C_ADC_TASK_INTERVAL_MS         1000  // ADC sensors
 #define I2C_GPIO_TASK_INTERVAL_MS        1000  // I2C GPIO expander
-#define GPIO_DISCRETE_TASK_INTERVAL_MS   1000  // Discrete GPIO inputs
+// GPIO_DISCRETE_TASK_INTERVAL_MS removed - GPIO discrete manager deprecated (no longer needed)
 #define I2C_ENV_TASK_INTERVAL_MS         5000  // Environmental sensors
 #define ONEWIRE_TEMP_TASK_INTERVAL_MS    5000  // Temperature sensors
 #define MQTT_PUBLISH_INTERVAL_MS         1000  // MQTT publishing interval (matches existing MQTT_PUBLISH_INTERVAL)
@@ -60,7 +60,7 @@
 #define SENSOR_EVENT_WAIT_TIMEOUT_MS     100   // Event group wait timeout for publisher (ms)
 
 // Fan Control Constants
-#define FAN_CONTROL_GPIO_PIN                  GPIO_NUM_21  // GPIO21 - Fan control (changed from GPIO16 to avoid UART conflict)
+#define FAN_CONTROL_GPIO_PIN                  GPIO_NUM_0   // GPIO0 - Fan control (moved from GPIO21 to free SPI SCK)
 #define FAN_CONTROL_THRESHOLD_TEMP_F          70.0   // Fan ON threshold (°F) - BME280 ambient
 #define FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F 85.0   // Fan ON threshold (°F) - Die temp fallback
 #define FAN_CONTROL_TEMP_VALID_MIN_F          -40.0  // Minimum valid ambient temperature (°F)
@@ -123,5 +123,25 @@
 #define MQTT_TOPIC_JSON                 "sensor/json"       // Base topic for JSON messages
 #define MQTT_AUTO_RECONNECT             1                   // Auto-reconnect on disconnect (1=enabled, 0=disabled)
 #define MQTT_CONNECT_TIMEOUT_MS         5000                // Connection timeout in milliseconds
+
+// MQTT Publishing Configuration
+#define MQTT_BINARY_QOS                2      // QoS level for binary GenericSens (QoS 2 - exactly-once, guaranteed delivery)
+#define MQTT_JSON_QOS                  0      // QoS level for JSON GenericSens (viewing)
+#define MQTT_SYSTEM_MONITOR_QOS        0      // QoS level for system monitor (viewing)
+#define MQTT_PUBLISH_MUTEX_TIMEOUT_MS  100    // Mutex timeout for reading genericSens_
+#define MQTT_SENSOR_COORD_TIMEOUT_MS   100    // Timeout for waiting for sensor coordination
+#define MQTT_JSON_TIMEOUT_MS           50     // Maximum time for JSON operations (abort if exceeded)
+#define MQTT_USE_TEST_SUFFIX           1      // 1 = use "-test" suffix, 0 = production
+
+// Topic definitions (with conditional test suffix)
+#if MQTT_USE_TEST_SUFFIX
+#define MQTT_TOPIC_BINARY_GENERICSENS   "mwp/data/sensor/well/S005D-test"
+#define MQTT_TOPIC_JSON_GENERICSENS     "mwp/json/data/sensor/well/S005D-test"
+#define MQTT_TOPIC_SYSTEM_MONITOR       "mwp/json/data/sensor/well/monitor-test"
+#else
+#define MQTT_TOPIC_BINARY_GENERICSENS   "mwp/data/sensor/well/S005D"
+#define MQTT_TOPIC_JSON_GENERICSENS     "mwp/json/sensor/well/S005D"
+#define MQTT_TOPIC_SYSTEM_MONITOR       "mwp/json/sensor/well/monitor"
+#endif
 
 #endif /* CONFIG_H */

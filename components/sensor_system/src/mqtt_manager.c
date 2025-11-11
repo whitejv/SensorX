@@ -52,7 +52,7 @@ esp_err_t mqtt_manager_init(void) {
     connected_to_prod = false;
 
     mqtt_manager_initialized = true;
-    ESP_LOGI(TAG, "MQTT manager initialized");
+    // MQTT manager initialized - no log (only report errors)
     return ESP_OK;
 }
 
@@ -136,8 +136,7 @@ static esp_err_t mqtt_manager_connect_to_server(const char* server_ip, bool is_p
     strncpy(current_broker_ip, server_ip, sizeof(current_broker_ip) - 1);
     current_broker_ip[sizeof(current_broker_ip) - 1] = '\0';
 
-    ESP_LOGI(TAG, "Connecting to MQTT %s server: %s", 
-             is_prod ? "production" : "development", broker_uri);
+    // Connecting to MQTT server - no log (only report errors)
 
     // Wait for connection (with timeout)
     uint32_t start_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
@@ -155,8 +154,7 @@ static esp_err_t mqtt_manager_connect_to_server(const char* server_ip, bool is_p
 
     if (current_status == MQTT_STATUS_CONNECTED) {
         stats.successfulConnections++;
-        ESP_LOGI(TAG, "MQTT connected to %s server", 
-                 is_prod ? "production" : "development");
+        // MQTT connected - no log (only report errors)
         return ESP_OK;
     }
 
@@ -172,7 +170,7 @@ esp_err_t mqtt_manager_disconnect(void) {
     if (ret == ESP_OK) {
         stats.disconnections++;
         current_status = MQTT_STATUS_DISCONNECTED;
-        ESP_LOGI(TAG, "MQTT disconnected");
+        // MQTT disconnected - no log (only report errors)
     }
     return ret;
 }
@@ -201,12 +199,13 @@ esp_err_t mqtt_manager_publish_binary(const char* topic,
                                           (const char*)payload, payload_len,
                                           qos, retain ? 1 : 0);
     if (msg_id < 0) {
-        ESP_LOGE(TAG, "Failed to publish binary message");
+        ESP_LOGE(TAG, "Failed to publish binary message: topic=%s, len=%zu, qos=%d", 
+                 publish_topic, payload_len, qos);
         stats.publishFailures++;
         error_report(ERROR_NONE, ERROR_SEVERITY_WARNING, "mqtt_manager_publish_binary", NULL);
         return ESP_FAIL;
     }
-
+    // Binary message published successfully - no log (only report errors)
     stats.publishSuccess++;
     return ESP_OK;
 }
@@ -269,13 +268,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
-            ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+            // MQTT connected - no log (only report errors)
             current_status = MQTT_STATUS_CONNECTED;
             stats.successfulConnections++;
             break;
 
         case MQTT_EVENT_DISCONNECTED:
-            ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+            // MQTT disconnected - no log (only report errors)
             current_status = MQTT_STATUS_DISCONNECTED;
             stats.disconnections++;
             
@@ -283,21 +282,21 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
             if (MQTT_AUTO_RECONNECT && mqtt_manager_initialized) {
                 current_status = MQTT_STATUS_RECONNECTING;
                 stats.reconnectAttempts++;
-                ESP_LOGI(TAG, "Attempting MQTT reconnection...");
+                // Attempting MQTT reconnection - no log (only report errors)
                 // Reconnection will be handled by ESP-IDF MQTT client
             }
             break;
 
         case MQTT_EVENT_SUBSCRIBED:
-            ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
+            // MQTT subscribed - no log (only report errors)
             break;
 
         case MQTT_EVENT_UNSUBSCRIBED:
-            ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
+            // MQTT unsubscribed - no log (only report errors)
             break;
 
         case MQTT_EVENT_PUBLISHED:
-            ESP_LOGD(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+            // MQTT published - no log (only report errors)
             break;
 
         case MQTT_EVENT_DATA:

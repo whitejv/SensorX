@@ -49,6 +49,8 @@
  * 1115 - Refactor Temp Sensor Read to one per frame
  * 1116 - Added RTC (RV1805), OpenLog, and Buzzer support for enhanced logging and alerts
  *         RTC initialized with NTP time instead of compiler time for accuracy
+ *         NOTE: ESP-IDF implementation uses built-in RTC with SNTP instead of external I2C RTC
+ *         This simplifies hardware (no RV1805 needed) and reduces I2C bus traffic
  *         Modified debug modes: DEBUG_MODE 0 eliminates SD card logging to reduce I2C traffic
  *         DEBUG_MODE 1+ enables SD card logging along with serial output
  * 1117 - Implemented sensor rate grouping with 100ms frames to distribute I2C sensor reads across time
@@ -58,6 +60,11 @@
  *         Added buffered logging system to reduce I2C traffic: 50kHz bus speed, 10ms timeout, 5sec buffer flush
  *         Dramatically reduced I2C operations from ~20/sec to ~0.2/sec for improved sensor reliability
  *         Implemented sequential execution: publishing and logging operations separated within each 1000ms cycle
+ * 
+ * NOTE: ESP-IDF implementation defers the following features to FUTURE_UPGRADES.md:
+ *   - OpenLog SD card logging (replaced with HTTP POST or MQTT logging options)
+ *   - I2C RTC (RV1805) - replaced with built-in RTC + SNTP
+ *   - Qwiic Buzzer - deferred to future upgrade
  *
  *
  */

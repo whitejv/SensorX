@@ -51,10 +51,11 @@ This document outlines the design goals for migrating the ESP8266-based sensor s
 
 **Low Priority Sensors (Status Monitoring):**
 - **GPIO Expanders**: MCP23X17 digital I/O status
-- **RTC/Time Sensors**: RV1805 real-time clock synchronization
+- **Time Management**: Built-in ESP32-C6 RTC synchronized with SNTP
 - **Characteristics**:
-  - Sampled opportunistically
-  - Used for system status and logging
+  - Time synchronized automatically after WiFi connects
+  - Used for system status and logging timestamps
+  - No external I2C RTC device needed
 
 ### Task Priority Classification
 
@@ -71,7 +72,7 @@ This document outlines the design goals for migrating the ESP8266-based sensor s
 **Background Tasks (Priority 1 - Best Effort):**
 - **SD Card Logging**: Write buffered data when system load permits
 - **System Monitoring**: Periodic health checks and status reporting
-- **NTP Synchronization**: Time synchronization (hourly intervals)
+- **SNTP Synchronization**: Automatic time synchronization via ESP-IDF SNTP (hourly intervals, configurable)
 
 **Idle Tasks (Priority 0 - Opportunistic):**
 - **WiFi Connection Management**: Maintain connectivity when possible
@@ -148,12 +149,11 @@ This document outlines the design goals for migrating the ESP8266-based sensor s
   - Data handling: Accumulates in protected counters
 
 **Background Tasks (Priority 1 - Best Effort):**
-- **SD Card Logger Task** - 2000-5000ms execution cycle
-  - Writes buffered sensor data to SD card at regular intervals to minimize RAM usage
-  - Manages log file rotation and error recovery with exponential backoff
+- **SD Card Logger Task** - DEFERRED (see FUTURE_UPGRADES.md)
+  - Logging system implementation deferred to future upgrade
+  - Options include: HTTP POST to server, MQTT logging, or W25Q128 SPI flash
   - Priority: 1 (runs when higher priority tasks are idle)
-  - Stack size: 4096 bytes
-  - Data handling: Flushes RAM circular buffer to SD card, maintains minimal memory footprint
+  - Stack size: 4096 bytes (when implemented)
 
 - **System Monitor Task** - 30000ms execution cycle
   - Reports system status and performance metrics
@@ -264,11 +264,9 @@ GenericSensorX/
 │   ├── ds18b20_driver.c
 │   ├── mcp23x17_driver.h        # GPIO expander driver
 │   ├── mcp23x17_driver.c
-│   ├── rtc_driver.h             # RV1805 RTC driver
-│   ├── rtc_driver.c
-│   ├── openlog_driver.h         # OpenLog SD card driver
-│   ├── openlog_driver.c
-│   └── buzzer_driver.h          # Qwiic buzzer driver
+│   ├── time_utils.h             # Time and timestamp utilities (built-in RTC + SNTP)
+│   ├── time_utils.c
+│   └── (OpenLog and Buzzer drivers deferred - see FUTURE_UPGRADES.md)
 ├── utils/
 │   ├── debug_utils.h            # Enhanced debugging utilities
 │   ├── debug_utils.c
@@ -315,9 +313,8 @@ GenericSensorX/
 #include "drivers/bme280_driver.h"
 #include "drivers/ds18b20_driver.h"
 #include "drivers/mcp23x17_driver.h"
-#include "drivers/rtc_driver.h"
-#include "drivers/openlog_driver.h"
-#include "drivers/buzzer_driver.h"
+#include "utils/time_utils.h"
+// OpenLog and Buzzer drivers deferred - see FUTURE_UPGRADES.md
 
 // Utility function includes
 #include "utils/debug_utils.h"

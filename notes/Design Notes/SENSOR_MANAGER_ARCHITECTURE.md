@@ -26,7 +26,6 @@ Sensors are organized into manager groups based on their interface and optimal r
 | **GPIO Discrete Manager** | Direct GPIO | 1000ms | Fixed Freq (3) | 3072 bytes |
 | **I2C Environmental Manager** | I2C (BME280, etc.) | 5000ms | Background (1) | 2048 bytes |
 | **One-Wire Temperature Manager** | One-Wire (DS18B20) | 5000ms | Background (1) | 2048 bytes |
-| **I2C RTC Manager** | I2C (RV1805, etc.) | As needed | Background (1) | 2048 bytes |
 
 **Note**: Fan control is handled by the System Monitor Task (not a sensor manager). See System Monitor section below.
 
@@ -313,23 +312,58 @@ onewire_temp_manager_scan_devices();  // Auto-discovers DS18B20 sensors
 - `genericSens_.temp2` through `genericSens_.temp4` (float temperatures)
 - `genericSens_.tempSensorcount` (number of sensors found)
 
-### I2C RTC Manager (Optional)
+### Time Management (Built-in RTC with SNTP)
 
-**Purpose**: Manages I2C RTC devices (RV1805, DS3231, etc.)
+**Purpose**: Provides accurate timestamps for data logging using ESP32-C6 built-in RTC synchronized with NTP
 
-**Interface**: I2C (RV1805 @ 0x69, etc.)
+**Interface**: Built-in ESP32-C6 RTC + SNTP (Simple Network Time Protocol)
 
-**Read Interval**: As needed (typically on request or periodic sync)
-
-**Task Configuration**:
-- Priority: `TASK_PRIORITY_BACKGROUND` (1)
-- Stack: `TASK_STACK_SIZE_BACKGROUND` (2048 bytes)
-- Watchdog Interval: Variable based on usage
+**Initialization**: After WiFi connection established
 
 **Implementation Details**:
-- Reads RTC timestamp when requested
-- Provides time synchronization for data logging
-- May update system timestamp in `genericSens_` structure
+- Uses ESP-IDF built-in SNTP client for automatic time synchronization
+- SNTP syncs with NTP servers (e.g., pool.ntp.org) after WiFi connects
+- Periodic re-sync (configurable, default 1 hour)
+- Standard C time functions available: `time()`, `gettimeofday()`, `localtime()`, `strftime()`
+- No external I2C RTC device needed - simplifies hardware and reduces I2C bus traffic
+- Time persists across deep sleep (if configured)
+- Sufficient accuracy for logging timestamps (±1 second typical)
+
+**Initialization**:
+```c
+// After WiFi connects, initialize SNTP
+#include "lwip/apps/sntp.h"
+
+void initialize_sntp(void) {
+    ESP_LOGI(TAG, "Initializing SNTP");
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");  // Primary NTP server
+    sntp_init();
+}
+```
+
+**Usage**:
+```c
+#include <time.h>
+
+// Get current time
+time_t now;
+time(&now);
+
+// Format timestamp for logging
+struct tm timeinfo;
+localtime_r(&now, &timeinfo);
+char timestamp[32];
+strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &timeinfo);
+```
+
+**Benefits**:
+- No I2C device required (one less device on bus)
+- Automatic synchronization with NTP servers
+- Standard C library functions (no custom driver needed)
+- Lower hardware cost
+- Less power consumption
+- Simpler codebase
 
 ## System-Level Control Functions
 
@@ -374,9 +408,9 @@ void vSystemMonitorTask(void *pvParameters) {
             xSemaphoreGive(sensor_data.mutex);
             
             if (current_temp >= 70.0) {
-                gpio_set_level(GPIO_NUM_21, 1);  // Fan ON
+                gpio_set_level(GPIO_NUM_0, 1);  // Fan ON
             } else {
-                gpio_set_level(GPIO_NUM_21, 0);  // Fan OFF
+                gpio_set_level(GPIO_NUM_0, 0);  // Fan OFF
             }
         }
         
@@ -607,7 +641,6 @@ components/sensor_system/
 │   ├── gpio_discrete_manager.h     # Discrete GPIO manager
 │   ├── i2c_env_manager.h           # I2C environmental sensor manager
 │   ├── onewire_temp_manager.h      # One-Wire temperature manager
-│   └── i2c_rtc_manager.h           # I2C RTC manager (optional)
 ├── src/
 │   ├── sensor_manager_types.c      # Shared data implementation
 │   ├── sensor_coordination.c       # Event group implementation
@@ -616,8 +649,7 @@ components/sensor_system/
 │   ├── i2c_gpio_manager.c          # I2C GPIO manager implementation
 │   ├── gpio_discrete_manager.c     # Discrete GPIO manager implementation
 │   ├── i2c_env_manager.c           # I2C environmental manager
-│   ├── onewire_temp_manager.c      # One-Wire manager
-│   └── i2c_rtc_manager.c           # RTC manager (optional)
+│   └── onewire_temp_manager.c      # One-Wire manager
 ```
 
 ## Integration Points
@@ -769,3 +801,10 @@ void app_main(void) {
 - Publisher publishes every 1000ms regardless of flow sensor `newData` flag (ensures consistent publishing interval)
 - **Fan Control**: Implemented in System Monitor Task, reads temperature from `genericSens_.tempx` every 1000ms (read-only consumer, doesn't participate in event group coordination)
 - **System Monitor Task**: Runs every 1000ms for fan control, logs system status every 5000ms
+
+## Deferred Features
+
+The following features are documented in `FUTURE_UPGRADES.md`:
+- **Time Management**: Built-in RTC with SNTP (replaces external I2C RTC) - *Note: Already implemented, but full SNTP integration deferred*
+- **Data Logging**: HTTP POST to local server (recommended), MQTT logging, or W25Q128 SPI flash storage options
+- **I2C Buzzer Manager**: Audio feedback and alerts for WiFi/MQTT status and system errors

@@ -32,7 +32,7 @@ extern "C" {
 #define SENSOR_EVENT_FLOW_COMPLETE       BIT0  // PCNT flow sensors (1000ms)
 #define SENSOR_EVENT_ADC_COMPLETE        BIT1  // I2C ADC sensors (1000ms)
 #define SENSOR_EVENT_GPIO_I2C_COMPLETE  BIT2  // I2C GPIO expander (1000ms)
-#define SENSOR_EVENT_GPIO_DISC_COMPLETE  BIT3  // Discrete GPIO inputs (1000ms)
+// SENSOR_EVENT_GPIO_DISC_COMPLETE removed - GPIO discrete manager deprecated (no longer needed)
 #define SENSOR_EVENT_ENV_COMPLETE       BIT4  // Environmental sensors (5000ms) - optional
 #define SENSOR_EVENT_TEMP_COMPLETE      BIT5  // Temperature sensors (5000ms) - optional
 
@@ -44,8 +44,7 @@ extern "C" {
  */
 #define SENSOR_EVENT_1000MS_MASK        (SENSOR_EVENT_FLOW_COMPLETE | \
                                          SENSOR_EVENT_ADC_COMPLETE | \
-                                         SENSOR_EVENT_GPIO_I2C_COMPLETE | \
-                                         SENSOR_EVENT_GPIO_DISC_COMPLETE)
+                                         SENSOR_EVENT_GPIO_I2C_COMPLETE)
 
 /**
  * Event Group Mask for 5000ms Sensors (Optional)

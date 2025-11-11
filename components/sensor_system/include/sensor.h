@@ -39,13 +39,13 @@ extern "C" {
 #define GENERICSENS_VERSION 1           // Protocol version
 
 // Block Information
-#define GENERICSENS_BLOCK_ID "X001D"
+#define GENERICSENS_BLOCK_ID "S005D"
 #define GENERICSENS_BLOCK_NAME "genericSens"
 
 // MQTT Configuration
 #define GENERICSENS_CLIENTID "Generic Flow Client"
-#define GENERICSENS_TOPICID "mwp/data/sensor/generic/X001D"
-#define GENERICSENS_JSONID "mwp/json/data/sensor/generic/X001D"
+#define GENERICSENS_TOPICID "mwp/data/sensor/well/S005D"
+#define GENERICSENS_JSONID "mwp/json/sensor/well/S005D"
 
 // ============================================================================
 // FlowData Bit-Packed Structure

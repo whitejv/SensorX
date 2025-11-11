@@ -119,14 +119,16 @@
 // Note: GPIO6 is ADC-capable but used as digital One-Wire bus
 
 // Fan Control Pin
-#define PIN_FAN_CONTROL     GPIO_NUM_21  // GPIO21 - Fan control output (HIGH = ON, LOW = OFF)
-// Note: Changed from GPIO16 (UART TX conflict) to GPIO21 (SPI SCK, available if SPI unused)
+#define PIN_FAN_CONTROL     GPIO_NUM_0   // GPIO0 - Fan control output (HIGH = ON, LOW = OFF)
+// Note: Changed from GPIO21 (SPI SCK) to GPIO0 (freed from deprecated DIP switch config)
 
-// Discrete GPIO Input Pins (config/status inputs)
-#define PIN_DISC_INPUT_1    GPIO_NUM_0   // GPIO0 - Discrete input 1 (config/status)
-#define PIN_DISC_INPUT_2    GPIO_NUM_1   // GPIO1 - Discrete input 2 (config/status)
-#define PIN_DISC_INPUT_3    GPIO_NUM_2   // GPIO2 - Discrete input 3 (config/status)
-// Note: GPIO0-2 are ADC-capable but used as digital inputs
+// Discrete GPIO Input Pins (DEPRECATED - No longer used)
+// Previously used for DIP switch configuration ID (3-bit = 8 configs)
+// Deprecated in favor of WiFi hostname/MAC address-based configuration
+// GPIO0 is now used for fan control; GPIO1 and GPIO2 are available for future use
+// #define PIN_DISC_INPUT_1    GPIO_NUM_0   // GPIO0 - Discrete input 1 (DEPRECATED - now used for fan control)
+// #define PIN_DISC_INPUT_2    GPIO_NUM_1   // GPIO1 - Discrete input 2 (DEPRECATED)
+// #define PIN_DISC_INPUT_3    GPIO_NUM_2   // GPIO2 - Discrete input 3 (DEPRECATED)
 
 
 // ============================================================================
@@ -148,9 +150,9 @@
 // ============================================================================
 // Important Pin Sharing Notes
 // ============================================================================
-// - GPIO0: Assigned as Discrete Input 1, also ADC1_CH0 (but not Arduino "A0")
-// - GPIO1: Assigned as Discrete Input 2, Arduino "A0" and "1", can be analog or digital
-// - GPIO2: Assigned as Discrete Input 3, Arduino "A5" and "2", can be analog or digital
+// - GPIO0: Assigned as Fan Control output (freed from deprecated DIP switch config)
+// - GPIO1: Available for future use, Arduino "A0" and "1", can be analog or digital
+// - GPIO2: Available for future use, Arduino "A5" and "2", can be analog or digital
 // - GPIO3: Assigned as PCNT Flow Sensor 3, Arduino "3", also ADC1_CH3 (Arduino "A4"), can be analog or digital
 // - GPIO4: Available as digital IO4, also ADC1_CH4 (Arduino "A1")
 // - GPIO5: Available as digital IO5, also ADC1_CH5 (Arduino "A3")
@@ -164,12 +166,12 @@
 // - GPIO13: RESERVED for JTAG TDO - DO NOT USE for other functions
 // - GPIO14: RESERVED for JTAG TCK - DO NOT USE for other functions
 // - GPIO15: RESERVED for JTAG TMS - DO NOT USE for other functions (shared with red LED)
-// - GPIO16: Assigned as Fan Control output (shared with UART TX - choose one function)
+// - GPIO16: UART TX (reserved if UART needed)
 // - GPIO17: UART RX (reserved if UART needed)
 // - GPIO18: RESERVED for I2C SCL - DO NOT USE for other functions
 // - GPIO19: RESERVED for I2C SDA - DO NOT USE for other functions
 // - GPIO20: RESERVED for STEMMA QT power enable - MUST be HIGH for I2C devices (NEOPIXEL_I2C_POWER)
-// - GPIO21: SPI SCK (available if SPI unused)
+// - GPIO21: SPI SCK (available for SPI or other use)
 // - GPIO22: SPI MOSI (available if SPI unused)
 // - GPIO23: SPI MISO (available if SPI unused)
 
@@ -179,9 +181,9 @@
 // ============================================================================
 // | GPIO | Function                  | Status      | Notes                        |
 // |------|---------------------------|-------------|------------------------------|
-// | 0    | Discrete Input 1          | Assigned    | ADC-capable                  |
-// | 1    | Discrete Input 2          | Assigned    | ADC-capable                  |
-// | 2    | Discrete Input 3          | Assigned    | ADC-capable                  |
+// | 0    | Fan Control              | Assigned    | ADC-capable                  |
+// | 1    | Available                | Free        | ADC-capable                  |
+// | 2    | Available                | Free        | ADC-capable                  |
 // | 3    | PCNT Flow Sensor 3        | Assigned    | ADC-capable                  |
 // | 4    | Available                | Free        | ADC-capable                  |
 // | 5    | Available                | Free        | ADC-capable                  |
@@ -200,27 +202,29 @@
 // | 18   | I2C SCL                  | Reserved    | In use                       |
 // | 19   | I2C SDA                  | Reserved    | In use                       |
 // | 20   | STEMMA QT Power Enable    | Reserved    | In use                       |
-// | 21   | Fan Control              | Assigned    | Changed from GPIO16 (UART conflict) |
+// | 21   | SPI SCK                   | Shared      | Available if SPI unused       |
 // | 22   | SPI MOSI                 | Shared      | Available if SPI unused       |
 // | 23   | SPI MISO                 | Shared      | Available if SPI unused       |
 //
 // Summary Statistics:
 // - Total GPIO pins (0-23): 24 pins
-// - Assigned for sensors/I/O: 9 pins (GPIO0, 1, 2, 3, 6, 7, 8, 20, 21)
+// - Assigned for sensors/I/O: 6 pins (GPIO0, 3, 6, 7, 8, 20)
 // - Reserved for critical functions: 6 pins (GPIO12-15 JTAG, GPIO18-19 I2C)
-// - Available for future use: 8 pins (GPIO4, 5, 9, 10, 16, 17, 22, 23)
-// - Shared/conflict pins: 5 pins (GPIO9, GPIO16-17 UART, GPIO22-23 SPI)
+// - Available for future use: 11 pins (GPIO1, 2, 4, 5, 9, 10, 16, 17, 21, 22, 23)
+// - Shared/conflict pins: 5 pins (GPIO9, GPIO16-17 UART, GPIO21-23 SPI)
 //
 // Notes:
+// - GPIO0: Assigned for fan control (freed from deprecated DIP switch config)
+// - GPIO1-2: Previously used for DIP switch config ID (deprecated), now available
 // - GPIO3: Assigned for PCNT Flow Sensor 3 (ADC-capable but used as digital)
 // - GPIO4-5: Fully available ADC-capable pins for future analog sensors or digital I/O
 // - GPIO9: Available if NeoPixel not used; boot button conflict only during reset
-// - GPIO10, 22-23: Available if SPI not needed; otherwise reserved for SPI
+// - GPIO10, 21-23: Available if SPI not needed; otherwise reserved for SPI
 // - GPIO16-17: Reserved for UART TX/RX if UART needed externally
-// - GPIO21: Assigned for fan control (changed from GPIO16 to avoid UART conflict)
+// - GPIO21: Now available for SPI SCK (fan control moved to GPIO0)
 // - GPIO20: Already configured and used in i2c_manager.c for STEMMA QT power
-// - All sensor requirements are covered with 9 pins assigned
-// - 9 pins remain available for future expansion
+// - All sensor requirements are covered with 6 pins assigned
+// - 11 pins remain available for future expansion
 // ============================================================================
 
 #endif /* PINS_H */
