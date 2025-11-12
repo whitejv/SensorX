@@ -7,4 +7,9 @@ dependencies:
   espressif/onewire_bus: ^1.0.4
   ## ADS1x15 ADC Component (ADS1015/ADS1115 I2C ADC support)
   espp/ads1x15: ^1.0.28
+  ## BME280 Environmental Sensor Component (Temperature, Humidity, Pressure)
+  ## Note: Component may need to be added as a submodule or local component
+  ## If component registry doesn't work, we can implement direct register access
+  ## For now, commenting out - will implement alternative approach if needed
+  # bme280: ^2.0.0
 

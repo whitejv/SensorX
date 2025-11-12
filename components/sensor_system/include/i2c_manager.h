@@ -16,10 +16,22 @@
 
 #include <esp_err.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <driver/i2c_master.h>
 
 // I2C bus handle (extern for access by sensor drivers)
 extern i2c_master_bus_handle_t i2c_bus_handle;
+
+// I2C Error Statistics Structure
+typedef struct {
+    uint32_t total_errors;           // Total I2C errors
+    uint32_t timeout_errors;         // I2C timeout errors
+    uint32_t nack_errors;            // I2C NACK errors
+    uint32_t bus_errors;             // I2C bus errors
+    uint32_t device_not_found;       // Device probe failures
+    uint32_t transaction_failures;   // Transaction failures
+    uint32_t last_error_time_ms;     // Timestamp of last error (ms since boot)
+} I2CStats_t;
 
 /*
  * Initialize I2C bus manager
@@ -62,6 +74,28 @@ i2c_master_bus_handle_t i2c_manager_get_bus_handle(void);
  * @return ESP_OK on success, error code on failure
  */
 esp_err_t i2c_manager_scan_devices(uint8_t* addresses, size_t max_count, size_t* found_count);
+
+/*
+ * Record an I2C error for statistics tracking
+ * Categorizes the error type and increments appropriate counters
+ * 
+ * @param error_code: ESP error code from I2C operation
+ */
+void i2c_manager_record_error(esp_err_t error_code);
+
+/*
+ * Get I2C error statistics
+ * Returns current error counts and last error timestamp
+ * 
+ * @param stats: Pointer to I2CStats_t structure to fill
+ */
+void i2c_manager_get_stats(I2CStats_t* stats);
+
+/*
+ * Reset I2C error statistics
+ * Clears all error counters (useful for testing or after recovery)
+ */
+void i2c_manager_reset_stats(void);
 
 #endif /* I2C_MANAGER_H */
 

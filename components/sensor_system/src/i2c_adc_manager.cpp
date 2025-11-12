@@ -266,6 +266,13 @@ static void vI2cAdcManagerTask(void *pvParameters) {
                     ESP_LOGW(TAG, "Failed to read %s channel %d at 0x%02X after %d retries: %s",
                             adc_devices[i].is_ads1115 ? "ADS1115" : "ADS1015",
                             channel, adc_devices[i].i2c_address, max_retries, error_msg.c_str());
+                    
+                    // Record I2C error for statistics
+                    // Note: std::error_code doesn't map directly to ESP error codes,
+                    // but we can infer timeout or transaction failure from context
+                    // Most I2C errors from espp library are timeout or NACK related
+                    i2c_manager_record_error(ESP_ERR_TIMEOUT);  // Most common I2C error
+                    
                     voltage = 0.0f;  // Use 0.0 on error
                     
                     // Longer delay after failure to let device recover

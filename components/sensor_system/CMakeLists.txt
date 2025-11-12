@@ -13,5 +13,6 @@ idf_component_register(SRCS "src/system_init.c"
                             "src/pcnt_flow_manager.c"
                             "src/i2c_adc_manager.cpp"
                             "src/i2c_gpio_manager.c"
+                            "src/i2c_env_manager.c"
                        INCLUDE_DIRS "include"
                        REQUIRES esp_hw_support driver esp_netif esp_event esp_wifi nvs_flash mqtt json onewire_bus espp__ads1x15)

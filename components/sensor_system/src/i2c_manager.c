@@ -11,6 +11,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "i2c_manager.h"
 #include "config.h"
@@ -25,6 +26,9 @@ i2c_master_bus_handle_t i2c_bus_handle = NULL;
 
 // Initialization status
 static bool i2c_manager_initialized = false;
+
+// I2C error statistics
+static I2CStats_t i2c_stats = {0};
 
 esp_err_t i2c_manager_init(void) {
     if (i2c_manager_initialized) {
@@ -171,5 +175,67 @@ esp_err_t i2c_manager_scan_devices(uint8_t* addresses, size_t max_count, size_t*
     esp_log_level_set("i2c.master", old_level);
 
     return ESP_OK;
+}
+
+// ============================================================================
+// I2C Error Statistics Functions
+// ============================================================================
+
+void i2c_manager_record_error(esp_err_t error_code) {
+    uint32_t current_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
+    
+    i2c_stats.total_errors++;
+    i2c_stats.last_error_time_ms = current_time;
+    
+    // Categorize error type
+    // Note: ESP-IDF I2C driver doesn't expose NACK as a separate error code.
+    // NACKs are typically reported as ESP_ERR_TIMEOUT or ESP_FAIL.
+    switch (error_code) {
+        case ESP_ERR_TIMEOUT:
+            // Timeout errors (may include NACKs)
+            i2c_stats.timeout_errors++;
+            break;
+        case ESP_ERR_NOT_FOUND:
+            // Device probe failures
+            i2c_stats.device_not_found++;
+            break;
+        case ESP_FAIL:
+            // General failures (may include NACKs and transaction failures)
+            // Count as transaction failure since we can't distinguish NACK from other failures
+            i2c_stats.transaction_failures++;
+            break;
+        case ESP_ERR_INVALID_RESPONSE:
+        case ESP_ERR_INVALID_STATE:
+            // Transaction-level errors
+            i2c_stats.transaction_failures++;
+            break;
+        case ESP_ERR_INVALID_ARG:
+        case ESP_ERR_INVALID_SIZE:
+            // Bus configuration errors
+            i2c_stats.bus_errors++;
+            break;
+        default:
+            // Check if it's a bus-level error (negative error codes)
+            if (error_code < 0) {
+                i2c_stats.bus_errors++;
+            } else {
+                // Unknown error type, count as transaction failure
+                i2c_stats.transaction_failures++;
+            }
+            break;
+    }
+}
+
+void i2c_manager_get_stats(I2CStats_t* stats) {
+    if (stats == NULL) {
+        return;
+    }
+    
+    // Copy statistics (thread-safe copy)
+    *stats = i2c_stats;
+}
+
+void i2c_manager_reset_stats(void) {
+    memset(&i2c_stats, 0, sizeof(I2CStats_t));
 }
 

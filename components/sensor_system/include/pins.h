@@ -119,13 +119,13 @@
 // Note: GPIO6 is ADC-capable but used as digital One-Wire bus
 
 // Fan Control Pin
-#define PIN_FAN_CONTROL     GPIO_NUM_0   // GPIO0 - Fan control output (HIGH = ON, LOW = OFF)
-// Note: Changed from GPIO21 (SPI SCK) to GPIO0 (freed from deprecated DIP switch config)
+#define PIN_FAN_CONTROL     GPIO_NUM_2   // GPIO2 - Fan control output (HIGH = ON, LOW = OFF)
+// Note: Changed from GPIO0 (strapping pin) to GPIO1 (UART TX) to GPIO2 (available, ADC-capable)
 
 // Discrete GPIO Input Pins (DEPRECATED - No longer used)
 // Previously used for DIP switch configuration ID (3-bit = 8 configs)
 // Deprecated in favor of WiFi hostname/MAC address-based configuration
-// GPIO0 is now used for fan control; GPIO1 and GPIO2 are available for future use
+// GPIO0 is a strapping pin and cannot be used as output; GPIO1 is used for fan control; GPIO2 is available for future use
 // #define PIN_DISC_INPUT_1    GPIO_NUM_0   // GPIO0 - Discrete input 1 (DEPRECATED - now used for fan control)
 // #define PIN_DISC_INPUT_2    GPIO_NUM_1   // GPIO1 - Discrete input 2 (DEPRECATED)
 // #define PIN_DISC_INPUT_3    GPIO_NUM_2   // GPIO2 - Discrete input 3 (DEPRECATED)
@@ -150,9 +150,9 @@
 // ============================================================================
 // Important Pin Sharing Notes
 // ============================================================================
-// - GPIO0: Assigned as Fan Control output (freed from deprecated DIP switch config)
-// - GPIO1: Available for future use, Arduino "A0" and "1", can be analog or digital
-// - GPIO2: Available for future use, Arduino "A5" and "2", can be analog or digital
+// - GPIO0: Strapping pin - cannot be used as output (freed from deprecated DIP switch config)
+// - GPIO1: UART TX (U0TXD) - not suitable for general-purpose output
+// - GPIO2: Assigned as Fan Control output (freed from deprecated DIP switch config)
 // - GPIO3: Assigned as PCNT Flow Sensor 3, Arduino "3", also ADC1_CH3 (Arduino "A4"), can be analog or digital
 // - GPIO4: Available as digital IO4, also ADC1_CH4 (Arduino "A1")
 // - GPIO5: Available as digital IO5, also ADC1_CH5 (Arduino "A3")
@@ -181,9 +181,9 @@
 // ============================================================================
 // | GPIO | Function                  | Status      | Notes                        |
 // |------|---------------------------|-------------|------------------------------|
-// | 0    | Fan Control              | Assigned    | ADC-capable                  |
-// | 1    | Available                | Free        | ADC-capable                  |
-// | 2    | Available                | Free        | ADC-capable                  |
+// | 0    | Strapping Pin            | Reserved    | Cannot use as output         |
+// | 1    | UART TX (U0TXD)          | Reserved    | Not for general-purpose      |
+// | 2    | Fan Control              | Assigned    | ADC-capable                  |
 // | 3    | PCNT Flow Sensor 3        | Assigned    | ADC-capable                  |
 // | 4    | Available                | Free        | ADC-capable                  |
 // | 5    | Available                | Free        | ADC-capable                  |
@@ -208,14 +208,15 @@
 //
 // Summary Statistics:
 // - Total GPIO pins (0-23): 24 pins
-// - Assigned for sensors/I/O: 6 pins (GPIO0, 3, 6, 7, 8, 20)
-// - Reserved for critical functions: 6 pins (GPIO12-15 JTAG, GPIO18-19 I2C)
-// - Available for future use: 11 pins (GPIO1, 2, 4, 5, 9, 10, 16, 17, 21, 22, 23)
+// - Assigned for sensors/I/O: 6 pins (GPIO2, 3, 6, 7, 8, 20)
+// - Reserved for critical functions: 8 pins (GPIO0 strapping, GPIO1 UART TX, GPIO12-15 JTAG, GPIO18-19 I2C)
+// - Available for future use: 9 pins (GPIO4, 5, 9, 10, 16, 17, 21, 22, 23)
 // - Shared/conflict pins: 5 pins (GPIO9, GPIO16-17 UART, GPIO21-23 SPI)
 //
 // Notes:
-// - GPIO0: Assigned for fan control (freed from deprecated DIP switch config)
-// - GPIO1-2: Previously used for DIP switch config ID (deprecated), now available
+// - GPIO0: Strapping pin - cannot be used as output (freed from deprecated DIP switch config)
+// - GPIO1: UART TX (U0TXD) - not suitable for general-purpose output
+// - GPIO2: Assigned for fan control (freed from deprecated DIP switch config)
 // - GPIO3: Assigned for PCNT Flow Sensor 3 (ADC-capable but used as digital)
 // - GPIO4-5: Fully available ADC-capable pins for future analog sensors or digital I/O
 // - GPIO9: Available if NeoPixel not used; boot button conflict only during reset

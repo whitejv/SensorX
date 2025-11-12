@@ -20,6 +20,7 @@
 #include "pcnt_flow_manager.h" // From sensor_system component
 #include "i2c_adc_manager.h" // From sensor_system component
 #include "i2c_gpio_manager.h" // From sensor_system component
+#include "i2c_env_manager.h" // From sensor_system component
 #include "pins.h"            // From sensor_system component - GPIO pin definitions
 
 static const char *TAG = "MAIN";
@@ -199,6 +200,34 @@ void app_main(void) {
             }
             
             ESP_LOGI(TAG, "Registered %d GPIO expander(s)", i2c_gpio_manager_get_device_count());
+        }
+        
+        // Initialize I2C Environmental Manager (BME280)
+        ret = i2c_env_manager_init();
+        if (ret != ESP_OK) {
+            error_report(ERROR_NONE, ERROR_SEVERITY_WARNING, "app_main", NULL);
+            ESP_LOGW(TAG, "Failed to initialize I2C Environmental Manager: %s", esp_err_to_name(ret));
+            // Continue anyway - BME280 is optional
+        } else {
+            ESP_LOGI(TAG, "I2C Environmental Manager initialized successfully");
+            
+            // Register BME280 sensor (try both common addresses)
+            // Try 0x77 first (most common), then 0x76
+            ret = i2c_env_manager_register_bme280(0x77);
+            if (ret != ESP_OK) {
+                ESP_LOGI(TAG, "BME280 not found at 0x77, trying 0x76...");
+                ret = i2c_env_manager_register_bme280(0x76);
+                if (ret != ESP_OK) {
+                    ESP_LOGW(TAG, "BME280 not found at either address (0x76 or 0x77): %s", esp_err_to_name(ret));
+                    // Continue - device may not be present
+                } else {
+                    ESP_LOGI(TAG, "Registered BME280 sensor at address 0x76");
+                }
+            } else {
+                ESP_LOGI(TAG, "Registered BME280 sensor at address 0x77");
+            }
+            
+            ESP_LOGI(TAG, "Registered %d environmental sensor(s)", i2c_env_manager_get_sensor_count());
         }
     }
 

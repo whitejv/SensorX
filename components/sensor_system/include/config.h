@@ -60,7 +60,7 @@
 #define SENSOR_EVENT_WAIT_TIMEOUT_MS     100   // Event group wait timeout for publisher (ms)
 
 // Fan Control Constants
-#define FAN_CONTROL_GPIO_PIN                  GPIO_NUM_0   // GPIO0 - Fan control (moved from GPIO21 to free SPI SCK)
+#define FAN_CONTROL_GPIO_PIN                  GPIO_NUM_2   // GPIO2 - Fan control (GPIO0/GPIO1 have special functions)
 #define FAN_CONTROL_THRESHOLD_TEMP_F          70.0   // Fan ON threshold (°F) - BME280 ambient
 #define FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F 85.0   // Fan ON threshold (°F) - Die temp fallback
 #define FAN_CONTROL_TEMP_VALID_MIN_F          -40.0  // Minimum valid ambient temperature (°F)

@@ -234,6 +234,9 @@ void vSystemMonitorTask(void *pvParameters) {
     // ============================================================================
     // Initialize Fan Control GPIO
     // ============================================================================
+    // First reset the pin to clear any previous configuration
+    gpio_reset_pin(FAN_CONTROL_GPIO_PIN);
+    
     gpio_config_t fan_config = {
         .pin_bit_mask = (1ULL << FAN_CONTROL_GPIO_PIN),
         .mode = GPIO_MODE_OUTPUT,
@@ -268,6 +271,7 @@ void vSystemMonitorTask(void *pvParameters) {
     static float current_temp = 0.0;
     static bool temp_valid = false;
     static bool using_fallback = false;
+    static bool fan_state = false;  // Track fan state (ON=true, OFF=false)
     static uint32_t log_counter = 0;
     static bool no_temp_warning_logged = false;  // Track if "no temp source" warning was logged
     
@@ -298,16 +302,30 @@ void vSystemMonitorTask(void *pvParameters) {
                 xSemaphoreGive(sensor_data.mutex);
 
                 // Validate BME280 reading
-                if (bme280_temp > FAN_CONTROL_TEMP_VALID_MIN_F && 
-                    bme280_temp < FAN_CONTROL_TEMP_VALID_MAX_F && 
-                    bme280_temp != 0.0) {
+                bool temp_in_range = (bme280_temp > FAN_CONTROL_TEMP_VALID_MIN_F && 
+                                     bme280_temp < FAN_CONTROL_TEMP_VALID_MAX_F);
+                bool temp_not_zero = (bme280_temp != 0.0);
+                
+                if (temp_in_range && temp_not_zero) {
                     current_temp = bme280_temp;
                     temp_valid = true;
                     using_fallback = false;
                     bme280_valid = true;
                     no_temp_warning_logged = false;  // Reset warning flag when valid temp found
+                } else {
+                    // Log why validation failed (only occasionally to avoid spam)
+                    static uint32_t validation_log_counter = 0;
+                    if ((validation_log_counter++ % 10) == 0) {  // Log every 10 seconds
+                        ESP_LOGW(TAG, "BME280 temp validation failed: temp=%.1f°F, in_range=%d, not_zero=%d (min=%.1f, max=%.1f)", 
+                                 bme280_temp, temp_in_range, temp_not_zero,
+                                 FAN_CONTROL_TEMP_VALID_MIN_F, FAN_CONTROL_TEMP_VALID_MAX_F);
+                    }
                 }
+            } else {
+                ESP_LOGW(TAG, "Failed to acquire mutex for temperature read");
             }
+        } else {
+            ESP_LOGW(TAG, "Sensor data mutex is NULL");
         }
 
         // Fallback: ESP32-C6 doesn't have a simple internal temperature sensor API
@@ -322,14 +340,24 @@ void vSystemMonitorTask(void *pvParameters) {
 
             if (current_temp >= threshold) {
                 gpio_set_level(FAN_CONTROL_GPIO_PIN, 1);  // Fan ON
+                fan_state = true;
             } else {
                 gpio_set_level(FAN_CONTROL_GPIO_PIN, 0);  // Fan OFF
+                fan_state = false;
             }
         } else {
             // No valid temperature source - default to fan ON for safety
             gpio_set_level(FAN_CONTROL_GPIO_PIN, 1);  // Fan ON (safe default)
+            fan_state = true;  // Track state
             if (!no_temp_warning_logged) {
                 ESP_LOGW(TAG, "No valid temperature source - fan ON for safety");
+                ESP_LOGW(TAG, "BME280 temp read: %.1f°F (valid: %s, min: %.1f, max: %.1f)", 
+                         bme280_temp, 
+                         (bme280_temp > FAN_CONTROL_TEMP_VALID_MIN_F && 
+                          bme280_temp < FAN_CONTROL_TEMP_VALID_MAX_F && 
+                          bme280_temp != 0.0) ? "YES" : "NO",
+                         FAN_CONTROL_TEMP_VALID_MIN_F,
+                         FAN_CONTROL_TEMP_VALID_MAX_F);
                 no_temp_warning_logged = true;  // Only log once
             }
         }
@@ -511,9 +539,37 @@ void vSystemMonitorTask(void *pvParameters) {
                             break;  // Not enough space
                         }
                     }
-                    ESP_LOGI(TAG, "I2C: Initialized | Devices: %zu [%s]", cached_device_count, addr_str);
+                    
+                    // Get I2C error statistics
+                    I2CStats_t i2c_stats;
+                    i2c_manager_get_stats(&i2c_stats);
+                    
+                    if (i2c_stats.total_errors > 0) {
+                        ESP_LOGI(TAG, "I2C: Initialized | Devices: %zu [%s] | Errors: %lu (timeouts: %lu, bus: %lu, not_found: %lu, tx_fail: %lu)",
+                                 cached_device_count, addr_str,
+                                 i2c_stats.total_errors,
+                                 i2c_stats.timeout_errors,
+                                 i2c_stats.bus_errors,
+                                 i2c_stats.device_not_found,
+                                 i2c_stats.transaction_failures);
+                    } else {
+                        ESP_LOGI(TAG, "I2C: Initialized | Devices: %zu [%s] | Errors: 0", cached_device_count, addr_str);
+                    }
                 } else if (i2c_scan_complete) {
-                    ESP_LOGI(TAG, "I2C: Initialized | No devices found");
+                    // Get I2C error statistics
+                    I2CStats_t i2c_stats;
+                    i2c_manager_get_stats(&i2c_stats);
+                    
+                    if (i2c_stats.total_errors > 0) {
+                        ESP_LOGI(TAG, "I2C: Initialized | No devices found | Errors: %lu (timeouts: %lu, bus: %lu, not_found: %lu, tx_fail: %lu)",
+                                 i2c_stats.total_errors,
+                                 i2c_stats.timeout_errors,
+                                 i2c_stats.bus_errors,
+                                 i2c_stats.device_not_found,
+                                 i2c_stats.transaction_failures);
+                    } else {
+                        ESP_LOGI(TAG, "I2C: Initialized | No devices found | Errors: 0");
+                    }
                 } else {
                     ESP_LOGI(TAG, "I2C: Initialized | Scanning...");
                 }
@@ -525,7 +581,7 @@ void vSystemMonitorTask(void *pvParameters) {
             }
 
             // Display fan control status and temperature
-            bool fan_state = gpio_get_level(FAN_CONTROL_GPIO_PIN);
+            // Note: fan_state is tracked in a variable since gpio_get_level() doesn't work reliably for output pins
             if (temp_valid) {
                 const char* temp_source = using_fallback ? "Die" : "Ambient";
                 float threshold_display = using_fallback ? FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F : FAN_CONTROL_THRESHOLD_TEMP_F;
@@ -600,16 +656,40 @@ void vSystemMonitorTask(void *pvParameters) {
                     }
                     
                     // I2C devices
-                    if (i2c_manager_is_initialized() && cached_device_count > 0) {
+                    if (i2c_manager_is_initialized()) {
                         cJSON *i2c_json = cJSON_CreateObject();
-                        cJSON *devices_array = cJSON_CreateArray();
-                        if (i2c_json != NULL && devices_array != NULL) {
-                            for (size_t i = 0; i < cached_device_count; i++) {
-                                cJSON_AddItemToArray(devices_array, cJSON_CreateNumber(cached_i2c_addresses[i]));
+                        if (i2c_json != NULL) {
+                            if (cached_device_count > 0) {
+                                cJSON *devices_array = cJSON_CreateArray();
+                                if (devices_array != NULL) {
+                                    for (size_t i = 0; i < cached_device_count; i++) {
+                                        cJSON_AddItemToArray(devices_array, cJSON_CreateNumber(cached_i2c_addresses[i]));
+                                    }
+                                    cJSON_AddNumberToObject(i2c_json, "device_count", cached_device_count);
+                                    cJSON_AddItemToObject(i2c_json, "devices", devices_array);
+                                }
+                            } else {
+                                cJSON_AddNumberToObject(i2c_json, "device_count", 0);
                             }
-                            cJSON_AddNumberToObject(i2c_json, "device_count", cached_device_count);
-                            cJSON_AddItemToObject(i2c_json, "devices", devices_array);
                             cJSON_AddStringToObject(i2c_json, "status", "initialized");
+                            
+                            // Add I2C error statistics
+                            I2CStats_t i2c_stats;
+                            i2c_manager_get_stats(&i2c_stats);
+                            if (i2c_stats.total_errors > 0) {
+                                cJSON *i2c_errors_json = cJSON_CreateObject();
+                                if (i2c_errors_json != NULL) {
+                                    cJSON_AddNumberToObject(i2c_errors_json, "total", i2c_stats.total_errors);
+                                    cJSON_AddNumberToObject(i2c_errors_json, "timeouts", i2c_stats.timeout_errors);
+                                    cJSON_AddNumberToObject(i2c_errors_json, "nacks", i2c_stats.nack_errors);
+                                    cJSON_AddNumberToObject(i2c_errors_json, "bus_errors", i2c_stats.bus_errors);
+                                    cJSON_AddNumberToObject(i2c_errors_json, "device_not_found", i2c_stats.device_not_found);
+                                    cJSON_AddNumberToObject(i2c_errors_json, "transaction_failures", i2c_stats.transaction_failures);
+                                    cJSON_AddNumberToObject(i2c_errors_json, "last_error_time_ms", i2c_stats.last_error_time_ms);
+                                    cJSON_AddItemToObject(i2c_json, "errors", i2c_errors_json);
+                                }
+                            }
+                            
                             cJSON_AddItemToObject(json, "i2c", i2c_json);
                         }
                     }

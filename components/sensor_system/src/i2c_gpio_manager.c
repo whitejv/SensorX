@@ -215,9 +215,11 @@ static void vI2cGpioManagerTask(void *pvParameters) {
             } else {
                 if (ret_a != ESP_OK) {
                     ESP_LOGW(TAG, "Failed to read MCP23017 Port A: %s", esp_err_to_name(ret_a));
+                    i2c_manager_record_error(ret_a);
                 }
                 if (ret_b != ESP_OK) {
                     ESP_LOGW(TAG, "Failed to read MCP23017 Port B: %s", esp_err_to_name(ret_b));
+                    i2c_manager_record_error(ret_b);
                 }
                 // Use 0 on error
                 port_a_value = 0;
