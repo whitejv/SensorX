@@ -131,7 +131,7 @@
 #define MQTT_PUBLISH_MUTEX_TIMEOUT_MS  100    // Mutex timeout for reading genericSens_
 #define MQTT_SENSOR_COORD_TIMEOUT_MS   100    // Timeout for waiting for sensor coordination
 #define MQTT_JSON_TIMEOUT_MS           50     // Maximum time for JSON operations (abort if exceeded)
-#define MQTT_USE_TEST_SUFFIX           1      // 1 = use "-test" suffix, 0 = production
+#define MQTT_USE_TEST_SUFFIX           0      // 1 = use "-test" suffix, 0 = production
 
 // Topic definitions (with conditional test suffix)
 #if MQTT_USE_TEST_SUFFIX

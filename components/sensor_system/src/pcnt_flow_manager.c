@@ -128,7 +128,7 @@ void vPcntFlowManagerTask(void *pvParameters) {
                         }
                         
                         flow_data.pulses = (uint16_t)pulse_count;  // Cast to 12-bit
-                        flow_data.milliseconds = elapsed_ms;
+                        flow_data.milliseconds = (pulse_count > 0) ? elapsed_ms : 0;  // Zero milliseconds if no pulses
                         flow_data.newData = 1;
                         
                         // Clear counter (atomic operation)
@@ -143,7 +143,7 @@ void vPcntFlowManagerTask(void *pvParameters) {
                     } else {
                         // Window not complete - store current data but continue accumulating
                         flow_data.pulses = (uint16_t)pulse_count;
-                        flow_data.milliseconds = elapsed_ms;
+                        flow_data.milliseconds = (pulse_count > 0) ? elapsed_ms : 0;  // Zero milliseconds if no pulses
                         flow_data.newData = 0;
                     }
                     
