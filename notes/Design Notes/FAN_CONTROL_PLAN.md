@@ -62,10 +62,10 @@ This document describes the fan control implementation for the SensorX ESP32-C6 
 ```
 // Try primary temperature source (BME280)
 IF BME280 sensor present AND genericSens_.tempx is valid:
-    IF genericSens_.tempx >= 70.0°F:
-        Fan ON (GPIO HIGH)
-    ELSE:
-        Fan OFF (GPIO LOW)
+IF genericSens_.tempx >= 70.0°F:
+    Fan ON (GPIO HIGH)
+ELSE:
+    Fan OFF (GPIO LOW)
 ELSE:
     // Fallback to internal die temperature
     IF internal_die_temp >= 85.0°F:

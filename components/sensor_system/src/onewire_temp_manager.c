@@ -5,10 +5,10 @@
  * Uses the official Espressif onewire_bus component (RMT-based hardware timing).
  * 
  * Features:
- * - Supports up to 4 DS18B20 sensors on GPIO6
+ * - Supports up to 5 DS18B20 sensors on GPIO6 (4 external + 1 internal)
  * - Reads all sensors every 5000ms
  * - Cooperative multitasking with yields between sensors
- * - Updates genericSens_.temp1-temp4
+ * - Updates genericSens_.temp1-temp4 and tempx (sensor 4 = internal temp)
  * - Watchdog protection
  * - Error handling and retry logic
  */
@@ -208,6 +208,11 @@ void vOneWireTempManagerTask(void *pvParameters) {
                                 break;
                             case 3:
                                 genericSens_.generic.temp4 = temp_fahrenheit;
+                                break;
+                            case 4:
+                                // 5th sensor (internal enclosure temperature) → tempx
+                                genericSens_.generic.tempx = temp_fahrenheit;
+                                ESP_LOGD(TAG, "Internal temp (sensor 4): %.1f°F", temp_fahrenheit);
                                 break;
                         }
                         xSemaphoreGive(sensor_data.mutex);

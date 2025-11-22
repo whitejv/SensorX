@@ -68,6 +68,11 @@ esp_err_t sensor_coordination_init(void) {
     genericSens_.generic.tempSensorcount = 0;
     genericSens_.generic.cycle_count = 0;
     genericSens_.generic.fw_version = (FIRMWARE_VERSION_MAJOR << 16) | FIRMWARE_VERSION_MINOR;
+    
+    // Initialize environmental fields (BME280 removed, always zero)
+    genericSens_.generic.humidity = 0.0f;      // No humidity sensor (BME280 removed)
+    genericSens_.generic.pressurex = 0.0f;    // No pressure sensor (BME280 removed)
+    genericSens_.generic.tempx = 0.0f;        // Will be updated by One-Wire sensor 4 (internal temp)
 
     ESP_LOGI(TAG, "Sensor coordination system initialized");
     ESP_LOGI(TAG, "GenericSens structure size: %zu bytes (expected: %d bytes)",

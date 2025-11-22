@@ -13,6 +13,7 @@
 #define FIRMWARE_VERSION_MAJOR    2
 #define FIRMWARE_VERSION_MINOR    1
 #define FIRMWARE_NAME             "SensorX ESP32"
+#define FIRMWARE_VERSION_STRING   "1.2"  // Firmware version string (major.minor)
 
 // FreeRTOS task priorities (higher number = higher priority in ESP-IDF)
 #define TASK_PRIORITY_CRITICAL    5    // Sensor acquisition, watchdog
@@ -34,7 +35,7 @@
 #define SD_LOG_FLUSH_INTERVAL        2000  // SD card flush interval (2-5 sec range)
 #define SYSTEM_STATUS_INTERVAL       30000 // System status reporting
 #define MONITOR_INTERVAL_MS          1000  // System monitor task interval (fan control check every 1s)
-#define MONITOR_LOG_INTERVAL_MS      5000  // System monitor logging interval (log every 5s)
+#define MONITOR_LOG_INTERVAL_MS      10000 // System monitor logging interval (log every 10s)
 
 // Buffer sizes
 #define SERIAL_BUFFER_SIZE           256   // Serial input buffer
@@ -61,7 +62,7 @@
 
 // Fan Control Constants
 #define FAN_CONTROL_GPIO_PIN                  GPIO_NUM_2   // GPIO2 - Fan control (GPIO0/GPIO1 have special functions)
-#define FAN_CONTROL_THRESHOLD_TEMP_F          70.0   // Fan ON threshold (°F) - BME280 ambient
+#define FAN_CONTROL_THRESHOLD_TEMP_F          70.0   // Fan ON threshold (°F) - One-Wire internal temp (sensor 4)
 #define FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F 85.0   // Fan ON threshold (°F) - Die temp fallback
 #define FAN_CONTROL_TEMP_VALID_MIN_F          -40.0  // Minimum valid ambient temperature (°F)
 #define FAN_CONTROL_TEMP_VALID_MAX_F          150.0  // Maximum valid ambient temperature (°F)
@@ -75,7 +76,7 @@
 #define ONEWIRE_YIELD_BETWEEN_MS        20     // Yield between sensors (minimal)
 #define ONEWIRE_READ_TIMEOUT_MS         1000   // Maximum read time per sensor
 #define ONEWIRE_CYCLE_TIMEOUT_MS        4500   // Maximum cycle time (safety margin)
-#define ONEWIRE_MAX_SENSORS             4      // Maximum sensors supported
+#define ONEWIRE_MAX_SENSORS             5      // Maximum sensors supported (4 external + 1 internal)
 
 // PCNT Flow Manager Constants
 #define FLOW_ACCUMULATION_WINDOW_MS     2000   // User-defined accumulation window (ms)
@@ -92,7 +93,7 @@
 #define I2C_TIMEOUT_MS               10    // 10ms timeout
 
 // System limits
-#define MAX_TEMPERATURE_SENSORS      4     // Maximum DS18B20 sensors
+#define MAX_TEMPERATURE_SENSORS      5     // Maximum DS18B20 sensors (4 external + 1 internal)
 #define MAX_ADC_CHANNELS             8     // Maximum ADC channels
 #define MAX_RETRY_ATTEMPTS           3     // Maximum retry attempts
 
@@ -128,6 +129,7 @@
 #define MQTT_BINARY_QOS                2      // QoS level for binary GenericSens (QoS 2 - exactly-once, guaranteed delivery)
 #define MQTT_JSON_QOS                  0      // QoS level for JSON GenericSens (viewing)
 #define MQTT_SYSTEM_MONITOR_QOS        0      // QoS level for system monitor (viewing)
+#define MQTT_TASK_MONITOR_QOS          0      // QoS level for task monitor (viewing)
 #define MQTT_PUBLISH_MUTEX_TIMEOUT_MS  100    // Mutex timeout for reading genericSens_
 #define MQTT_SENSOR_COORD_TIMEOUT_MS   100    // Timeout for waiting for sensor coordination
 #define MQTT_JSON_TIMEOUT_MS           50     // Maximum time for JSON operations (abort if exceeded)
@@ -142,6 +144,18 @@
 #define MQTT_TOPIC_BINARY_GENERICSENS   "mwp/data/sensor/well/S005D"
 #define MQTT_TOPIC_JSON_GENERICSENS     "mwp/json/sensor/well/S005D"
 #define MQTT_TOPIC_SYSTEM_MONITOR       "mwp/json/sensor/well/monitor"
+#define MQTT_TOPIC_TASK_MONITOR         "mwp/json/sensor/well/taskmonitor"
 #endif
+
+// Production/Development Mode Control
+#define PRODUCTION_MODE                1      // 0 = Development (verbose), 1 = Production (minimal)
+#define ENABLE_TASK_MONITOR_OUTPUT     0      // Enable task monitor output (gated by PRODUCTION_MODE)
+#define ENABLE_SYSTEM_MONITOR_OUTPUT   0      // Enable system monitor output (gated by PRODUCTION_MODE)
+
+// Task Monitor Configuration
+#define TASK_MONITOR_ENABLED           1      // Enable task monitor task
+#define TASK_MONITOR_INTERVAL_MS       120000 // 2 minutes (120 seconds) - periodic output interval
+#define TASK_MONITOR_STACK_SIZE        6144   // Stack size for task monitor task (bytes)
+#define TASK_MONITOR_PRIORITY          0      // Lowest priority (idle priority)
 
 #endif /* CONFIG_H */

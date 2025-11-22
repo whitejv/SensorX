@@ -31,6 +31,8 @@
 #include "i2c_manager.h"
 #include "sensor_coordination.h"
 #include "sensor.h"
+#include "onewire_temp_manager.h"
+#include "panic_stats.h"
 
 static const char *TAG = "SYSTEM_INIT";
 
@@ -206,15 +208,15 @@ static void print_sensor_data_verbose(void) {
     ESP_LOGI("SENSOR_DATA", "  Temp2 (DS18B20-1): %.1f°F", genericSens_.generic.temp2);
     ESP_LOGI("SENSOR_DATA", "  Temp3 (DS18B20-2): %.1f°F", genericSens_.generic.temp3);
     ESP_LOGI("SENSOR_DATA", "  Temp4 (DS18B20-3): %.1f°F", genericSens_.generic.temp4);
-    ESP_LOGI("SENSOR_DATA", "  TempX (BME280): %.1f°F", genericSens_.generic.tempx);
+    ESP_LOGI("SENSOR_DATA", "  TempX (Internal): %.1f°F", genericSens_.generic.tempx);
     ESP_LOGI("SENSOR_DATA", "  Sensors Detected: %ld", genericSens_.generic.tempSensorcount);
     ESP_LOGI("SENSOR_DATA", "");
     
     // Environmental Sensors
-    ESP_LOGI("SENSOR_DATA", "ENVIRONMENTAL (BME280):");
-    ESP_LOGI("SENSOR_DATA", "  Temperature: %.1f°F", genericSens_.generic.tempx);
-    ESP_LOGI("SENSOR_DATA", "  Pressure: %.4f PSI", genericSens_.generic.pressurex);
-    ESP_LOGI("SENSOR_DATA", "  Humidity: %.1f%%", genericSens_.generic.humidity);
+    ESP_LOGI("SENSOR_DATA", "ENVIRONMENTAL:");
+    ESP_LOGI("SENSOR_DATA", "  Temperature (Internal): %.1f°F", genericSens_.generic.tempx);
+    ESP_LOGI("SENSOR_DATA", "  Pressure: %.4f PSI (not available)", genericSens_.generic.pressurex);
+    ESP_LOGI("SENSOR_DATA", "  Humidity: %.1f%% (not available)", genericSens_.generic.humidity);
     ESP_LOGI("SENSOR_DATA", "");
     
     // System Data
@@ -274,9 +276,6 @@ void vSystemMonitorTask(void *pvParameters) {
     static bool fan_state = false;  // Track fan state (ON=true, OFF=false)
     static uint32_t log_counter = 0;
     static bool no_temp_warning_logged = false;  // Track if "no temp source" warning was logged
-    
-    // Verbose sensor data display timing
-    static uint32_t last_sensor_print = 0;
 
     if (!initialized) {
         startTime = xTaskGetTickCount() * portTICK_PERIOD_MS;
@@ -292,32 +291,32 @@ void vSystemMonitorTask(void *pvParameters) {
         // ============================================================================
         // Fan Control (every loop iteration = 1000ms)
         // ============================================================================
-        // Try primary temperature source (BME280 from genericSens_.tempx)
-        float bme280_temp = 0.0;
-        bool bme280_valid = false;
+        // Try primary temperature source (One-Wire internal temp from genericSens_.tempx)
+        float internal_temp = 0.0;
+        bool internal_temp_valid = false;
 
         if (sensor_data.mutex != NULL) {
             if (xSemaphoreTake(sensor_data.mutex, pdMS_TO_TICKS(FAN_CONTROL_MUTEX_TIMEOUT_MS)) == pdTRUE) {
-                bme280_temp = genericSens_.generic.tempx;
+                internal_temp = genericSens_.generic.tempx;
                 xSemaphoreGive(sensor_data.mutex);
 
-                // Validate BME280 reading
-                bool temp_in_range = (bme280_temp > FAN_CONTROL_TEMP_VALID_MIN_F && 
-                                     bme280_temp < FAN_CONTROL_TEMP_VALID_MAX_F);
-                bool temp_not_zero = (bme280_temp != 0.0);
+                // Validate internal temperature reading
+                bool temp_in_range = (internal_temp > FAN_CONTROL_TEMP_VALID_MIN_F && 
+                                     internal_temp < FAN_CONTROL_TEMP_VALID_MAX_F);
+                bool temp_not_zero = (internal_temp != 0.0);
                 
                 if (temp_in_range && temp_not_zero) {
-                    current_temp = bme280_temp;
+                    current_temp = internal_temp;
                     temp_valid = true;
                     using_fallback = false;
-                    bme280_valid = true;
+                    internal_temp_valid = true;
                     no_temp_warning_logged = false;  // Reset warning flag when valid temp found
                 } else {
                     // Log why validation failed (only occasionally to avoid spam)
                     static uint32_t validation_log_counter = 0;
                     if ((validation_log_counter++ % 10) == 0) {  // Log every 10 seconds
-                        ESP_LOGW(TAG, "BME280 temp validation failed: temp=%.1f°F, in_range=%d, not_zero=%d (min=%.1f, max=%.1f)", 
-                                 bme280_temp, temp_in_range, temp_not_zero,
+                        ESP_LOGW(TAG, "Internal temp validation failed: temp=%.1f°F, in_range=%d, not_zero=%d (min=%.1f, max=%.1f)", 
+                                 internal_temp, temp_in_range, temp_not_zero,
                                  FAN_CONTROL_TEMP_VALID_MIN_F, FAN_CONTROL_TEMP_VALID_MAX_F);
                     }
                 }
@@ -329,8 +328,8 @@ void vSystemMonitorTask(void *pvParameters) {
         }
 
         // Fallback: ESP32-C6 doesn't have a simple internal temperature sensor API
-        // If BME280 is unavailable, temp_valid will remain false and fan will default to ON
-        if (!bme280_valid) {
+        // If One-Wire internal temp is unavailable, temp_valid will remain false and fan will default to ON
+        if (!internal_temp_valid) {
             temp_valid = false;
         }
 
@@ -351,11 +350,11 @@ void vSystemMonitorTask(void *pvParameters) {
             fan_state = true;  // Track state
             if (!no_temp_warning_logged) {
                 ESP_LOGW(TAG, "No valid temperature source - fan ON for safety");
-                ESP_LOGW(TAG, "BME280 temp read: %.1f°F (valid: %s, min: %.1f, max: %.1f)", 
-                         bme280_temp, 
-                         (bme280_temp > FAN_CONTROL_TEMP_VALID_MIN_F && 
-                          bme280_temp < FAN_CONTROL_TEMP_VALID_MAX_F && 
-                          bme280_temp != 0.0) ? "YES" : "NO",
+                ESP_LOGW(TAG, "Internal temp read: %.1f°F (valid: %s, min: %.1f, max: %.1f)", 
+                         internal_temp, 
+                         (internal_temp > FAN_CONTROL_TEMP_VALID_MIN_F && 
+                          internal_temp < FAN_CONTROL_TEMP_VALID_MAX_F && 
+                          internal_temp != 0.0) ? "YES" : "NO",
                          FAN_CONTROL_TEMP_VALID_MIN_F,
                          FAN_CONTROL_TEMP_VALID_MAX_F);
                 no_temp_warning_logged = true;  // Only log once
@@ -366,6 +365,7 @@ void vSystemMonitorTask(void *pvParameters) {
         // Verbose Sensor Data Display (every SENSOR_DATA_VERBOSE_INTERVAL_MS)
         // ============================================================================
 #if VERBOSE
+        static uint32_t last_sensor_print = 0;  // Verbose sensor data display timing
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
         if (now - last_sensor_print >= SENSOR_DATA_VERBOSE_INTERVAL_MS) {
             print_sensor_data_verbose();
@@ -374,124 +374,149 @@ void vSystemMonitorTask(void *pvParameters) {
 #endif
 
         // ============================================================================
-        // System Monitoring (every 5th iteration = 5000ms)
+        // System Monitoring (every 10th iteration = 10000ms)
         // ============================================================================
         log_counter++;
         if (log_counter >= (MONITOR_LOG_INTERVAL_MS / MONITOR_INTERVAL_MS)) {
             log_counter = 0;
 
-        // Calculate uptime
-        uint32_t currentTime = xTaskGetTickCount() * portTICK_PERIOD_MS;
-        uint32_t uptimeMs = currentTime - startTime;
-        uint32_t uptimeSeconds = uptimeMs / 1000;
-        uint32_t uptimeHours = uptimeSeconds / 3600;
-        uint32_t uptimeMinutes = (uptimeSeconds % 3600) / 60;
-        uint32_t uptimeSecs = uptimeSeconds % 60;
+            // Check production gate for system monitor output
+            bool system_monitor_output_enabled = true;
+#if PRODUCTION_MODE
+            system_monitor_output_enabled = (ENABLE_SYSTEM_MONITOR_OUTPUT == 1);
+#else
+            system_monitor_output_enabled = true;  // Always enabled in development mode
+#endif
 
-        // Get current memory stats
-        size_t currentHeapFree = esp_get_free_heap_size();
+            // Calculate uptime (always needed for MQTT)
+            uint32_t currentTime = xTaskGetTickCount() * portTICK_PERIOD_MS;
+            uint32_t uptimeMs = currentTime - startTime;
+            uint32_t uptimeSeconds = uptimeMs / 1000;
+            uint32_t uptimeHours = uptimeSeconds / 3600;
+            uint32_t uptimeMinutes = (uptimeSeconds % 3600) / 60;
+            uint32_t uptimeSecs = uptimeSeconds % 60;
 
-        // Update minimum heap tracking
-        if (currentHeapFree < minHeapFree) {
-            minHeapFree = currentHeapFree;
-        }
+            // Get current memory stats (always needed for MQTT)
+            size_t currentHeapFree = esp_get_free_heap_size();
 
-        // Get task information
-        UBaseType_t currentTaskCount = uxTaskGetNumberOfTasks();
+            // Update minimum heap tracking
+            if (currentHeapFree < minHeapFree) {
+                minHeapFree = currentHeapFree;
+            }
 
-        // Display monitoring information
-        ESP_LOGI(TAG, "--- System Monitor ---");
-        ESP_LOGI(TAG, "Uptime: %02lu:%02lu:%02lu (HH:MM:SS)",
-                 uptimeHours, uptimeMinutes, uptimeSecs);
-        ESP_LOGI(TAG, "Free Heap: %zu bytes (Min: %zu bytes)",
-                 currentHeapFree, minHeapFree);
-        ESP_LOGI(TAG, "Active Tasks: %d", currentTaskCount);
+            // Get task information (always needed for MQTT)
+            UBaseType_t currentTaskCount = uxTaskGetNumberOfTasks();
 
-        // Show task count changes
-        if (currentTaskCount != lastTaskCount) {
-            ESP_LOGW(TAG, "Task count changed from %d to %d",
-                     lastTaskCount, currentTaskCount);
-            lastTaskCount = currentTaskCount;
-        }
+            // Display monitoring information (gated by production mode)
+            if (system_monitor_output_enabled) {
+                ESP_LOGI(TAG, "--- System Monitor ---");
+                ESP_LOGI(TAG, "Firmware: %s | Build: %s %s", 
+                         FIRMWARE_VERSION_STRING, __DATE__, __TIME__);
+                ESP_LOGI(TAG, "Uptime: %02lu:%02lu:%02lu (HH:MM:SS)",
+                         uptimeHours, uptimeMinutes, uptimeSecs);
+                ESP_LOGI(TAG, "Free Heap: %zu bytes (Min: %zu bytes)",
+                         currentHeapFree, minHeapFree);
+                ESP_LOGI(TAG, "Active Tasks: %d", currentTaskCount);
+                
+                // Get and display panic statistics
+                PanicStats_t panic_stats;
+                if (panic_stats_get(&panic_stats) == ESP_OK) {
+                    ESP_LOGI(TAG, "Panics: %lu total, %lu since clean boot | Last Reset: %s",
+                             panic_stats.total_panic_count,
+                             panic_stats.panics_since_clean,
+                             panic_stats_get_reset_reason_string(panic_stats.last_reset_reason));
+                }
+            }
 
-        // Show heap usage trend
-        if (currentHeapFree != lastHeapFree) {
-            int32_t heapChange = (int32_t)currentHeapFree - (int32_t)lastHeapFree;
-            ESP_LOGD(TAG, "Heap change: %ld bytes", heapChange);
-            lastHeapFree = currentHeapFree;
-        }
+            // Show task count changes
+            if (system_monitor_output_enabled && currentTaskCount != lastTaskCount) {
+                ESP_LOGW(TAG, "Task count changed from %d to %d",
+                         lastTaskCount, currentTaskCount);
+                lastTaskCount = currentTaskCount;
+            }
 
-        // Get system state from error recovery
-        SystemState_t state = error_recovery_get_system_state();
-        if (state != SYSTEM_STATE_RUNNING) {
-            ESP_LOGW(TAG, "System state: %d", state);
-        }
+            // Show heap usage trend
+            if (system_monitor_output_enabled && currentHeapFree != lastHeapFree) {
+                int32_t heapChange = (int32_t)currentHeapFree - (int32_t)lastHeapFree;
+                ESP_LOGD(TAG, "Heap change: %ld bytes", heapChange);
+                lastHeapFree = currentHeapFree;
+            }
 
-        // Get error statistics
-        ErrorRecoveryStats_t error_stats;
-        error_recovery_get_stats(&error_stats);
-        if (error_stats.total_errors > 0) {
-            ESP_LOGI(TAG, "Errors: total=%lu, recovered=%lu, critical=%lu",
-                     error_stats.total_errors,
-                     error_stats.recovered_errors,
-                     error_stats.critical_errors);
-        }
+            // Get system state from error recovery
+            SystemState_t state = error_recovery_get_system_state();
+            if (system_monitor_output_enabled && state != SYSTEM_STATE_RUNNING) {
+                ESP_LOGW(TAG, "System state: %d", state);
+            }
 
-        // Get watchdog statistics
-        WatchdogStats_t wdt_stats;
-        watchdog_get_stats(&wdt_stats);
-        ESP_LOGI(TAG, "Watchdog: feeds=%lu, timeouts=%lu, tasks=%lu",
-                 wdt_stats.totalFeeds,
-                 wdt_stats.timeoutCount,
-                 wdt_stats.tasksMonitored);
+            // Get error statistics
+            ErrorRecoveryStats_t error_stats;
+            error_recovery_get_stats(&error_stats);
+            if (system_monitor_output_enabled && error_stats.total_errors > 0) {
+                ESP_LOGI(TAG, "Errors: total=%lu, recovered=%lu, critical=%lu",
+                         error_stats.total_errors,
+                         error_stats.recovered_errors,
+                         error_stats.critical_errors);
+            }
 
-        // Get WiFi status
-        WiFiStatus_t wifi_status = wifi_manager_get_status();
-        bool wifi_connected = wifi_manager_is_connected();
-        
-        if (wifi_connected) {
-            char ip_str[16];
-            int8_t rssi = wifi_manager_get_rssi();
-            WiFiStats_t wifi_stats;
-            wifi_manager_get_stats(&wifi_stats);
+            // Get watchdog statistics
+            WatchdogStats_t wdt_stats;
+            watchdog_get_stats(&wdt_stats);
+            if (system_monitor_output_enabled) {
+                ESP_LOGI(TAG, "Watchdog: feeds=%lu, timeouts=%lu, tasks=%lu",
+                         wdt_stats.totalFeeds,
+                         wdt_stats.timeoutCount,
+                         wdt_stats.tasksMonitored);
+            }
+
+            // Get WiFi status
+            WiFiStatus_t wifi_status = wifi_manager_get_status();
+            bool wifi_connected = wifi_manager_is_connected();
             
-            if (wifi_manager_get_ip_address(ip_str, sizeof(ip_str)) == ESP_OK) {
-                ESP_LOGI(TAG, "WiFi: Connected | IP: %s | RSSI: %d dBm | Uptime: %lu sec",
-                         ip_str, rssi, wifi_stats.uptime);
-            } else {
-                ESP_LOGI(TAG, "WiFi: Connected | RSSI: %d dBm | Uptime: %lu sec",
-                         rssi, wifi_stats.uptime);
+            if (system_monitor_output_enabled) {
+                if (wifi_connected) {
+                    char ip_str[16];
+                    int8_t rssi = wifi_manager_get_rssi();
+                    WiFiStats_t wifi_stats;
+                    wifi_manager_get_stats(&wifi_stats);
+                    
+                    if (wifi_manager_get_ip_address(ip_str, sizeof(ip_str)) == ESP_OK) {
+                        ESP_LOGI(TAG, "WiFi: Connected | IP: %s | RSSI: %d dBm | Uptime: %lu sec",
+                                 ip_str, rssi, wifi_stats.uptime);
+                    } else {
+                        ESP_LOGI(TAG, "WiFi: Connected | RSSI: %d dBm | Uptime: %lu sec",
+                                 rssi, wifi_stats.uptime);
+                    }
+                } else {
+                    const char* status_str = "Unknown";
+                    switch (wifi_status) {
+                        case WIFI_STATUS_DISCONNECTED:
+                            status_str = "Disconnected";
+                            break;
+                        case WIFI_STATUS_CONNECTING:
+                            status_str = "Connecting";
+                            break;
+                        case WIFI_STATUS_RECONNECTING:
+                            status_str = "Reconnecting";
+                            break;
+                        case WIFI_STATUS_ERROR:
+                            status_str = "Error";
+                            break;
+                        default:
+                            status_str = "Unknown";
+                            break;
+                    }
+                    ESP_LOGI(TAG, "WiFi: %s", status_str);
+                }
             }
-        } else {
-            const char* status_str = "Unknown";
-            switch (wifi_status) {
-                case WIFI_STATUS_DISCONNECTED:
-                    status_str = "Disconnected";
-                    break;
-                case WIFI_STATUS_CONNECTING:
-                    status_str = "Connecting";
-                    break;
-                case WIFI_STATUS_RECONNECTING:
-                    status_str = "Reconnecting";
-                    break;
-                case WIFI_STATUS_ERROR:
-                    status_str = "Error";
-                    break;
-                default:
-                    status_str = "Unknown";
-                    break;
-            }
-            ESP_LOGI(TAG, "WiFi: %s", status_str);
-        }
 
-        // Get MQTT status
-        MQTTStatus_t mqtt_status = mqtt_manager_get_status();
-        bool mqtt_connected = mqtt_manager_is_connected();
-        
-        // MQTT status - only report errors (no log for normal operation)
-        if (!mqtt_connected && mqtt_status == MQTT_STATUS_ERROR) {
-            ESP_LOGE(TAG, "MQTT: Error state detected");
-        }
+            // Get MQTT status
+            MQTTStatus_t mqtt_status = mqtt_manager_get_status();
+            bool mqtt_connected = mqtt_manager_is_connected();
+            
+            // MQTT status - only report errors (no log for normal operation)
+            if (!mqtt_connected && mqtt_status == MQTT_STATUS_ERROR) {
+                ESP_LOGE(TAG, "MQTT: Error state detected");
+            }
 
             // Get I2C status (cache results to avoid scanning every cycle)
             static uint8_t cached_i2c_addresses[16] = {0};
@@ -544,66 +569,152 @@ void vSystemMonitorTask(void *pvParameters) {
                     I2CStats_t i2c_stats;
                     i2c_manager_get_stats(&i2c_stats);
                     
-                    if (i2c_stats.total_errors > 0) {
-                        ESP_LOGI(TAG, "I2C: Initialized | Devices: %zu [%s] | Errors: %lu (timeouts: %lu, bus: %lu, not_found: %lu, tx_fail: %lu)",
-                                 cached_device_count, addr_str,
-                                 i2c_stats.total_errors,
-                                 i2c_stats.timeout_errors,
-                                 i2c_stats.bus_errors,
-                                 i2c_stats.device_not_found,
-                                 i2c_stats.transaction_failures);
-                    } else {
-                        ESP_LOGI(TAG, "I2C: Initialized | Devices: %zu [%s] | Errors: 0", cached_device_count, addr_str);
+                    if (system_monitor_output_enabled) {
+                        if (i2c_stats.total_errors > 0) {
+                            ESP_LOGI(TAG, "I2C: Initialized | Devices: %zu [%s] | Errors: %lu (timeouts: %lu, bus: %lu, not_found: %lu, tx_fail: %lu)",
+                                     cached_device_count, addr_str,
+                                     i2c_stats.total_errors,
+                                     i2c_stats.timeout_errors,
+                                     i2c_stats.bus_errors,
+                                     i2c_stats.device_not_found,
+                                     i2c_stats.transaction_failures);
+                        } else {
+                            ESP_LOGI(TAG, "I2C: Initialized | Devices: %zu [%s] | Errors: 0", cached_device_count, addr_str);
+                        }
                     }
                 } else if (i2c_scan_complete) {
                     // Get I2C error statistics
                     I2CStats_t i2c_stats;
                     i2c_manager_get_stats(&i2c_stats);
                     
-                    if (i2c_stats.total_errors > 0) {
-                        ESP_LOGI(TAG, "I2C: Initialized | No devices found | Errors: %lu (timeouts: %lu, bus: %lu, not_found: %lu, tx_fail: %lu)",
-                                 i2c_stats.total_errors,
-                                 i2c_stats.timeout_errors,
-                                 i2c_stats.bus_errors,
-                                 i2c_stats.device_not_found,
-                                 i2c_stats.transaction_failures);
-                    } else {
-                        ESP_LOGI(TAG, "I2C: Initialized | No devices found | Errors: 0");
+                    if (system_monitor_output_enabled) {
+                        if (i2c_stats.total_errors > 0) {
+                            ESP_LOGI(TAG, "I2C: Initialized | No devices found | Errors: %lu (timeouts: %lu, bus: %lu, not_found: %lu, tx_fail: %lu)",
+                                     i2c_stats.total_errors,
+                                     i2c_stats.timeout_errors,
+                                     i2c_stats.bus_errors,
+                                     i2c_stats.device_not_found,
+                                     i2c_stats.transaction_failures);
+                        } else {
+                            ESP_LOGI(TAG, "I2C: Initialized | No devices found | Errors: 0");
+                        }
                     }
                 } else {
-                    ESP_LOGI(TAG, "I2C: Initialized | Scanning...");
+                    if (system_monitor_output_enabled) {
+                        ESP_LOGI(TAG, "I2C: Initialized | Scanning...");
+                    }
                 }
             } else {
-                ESP_LOGI(TAG, "I2C: Not initialized");
+                if (system_monitor_output_enabled) {
+                    ESP_LOGI(TAG, "I2C: Not initialized");
+                }
                 // Reset cache when I2C is not initialized
                 cached_device_count = 0;
                 i2c_scan_complete = false;
             }
 
-            // Display fan control status and temperature
-            // Note: fan_state is tracked in a variable since gpio_get_level() doesn't work reliably for output pins
-            if (temp_valid) {
-                const char* temp_source = using_fallback ? "Die" : "Ambient";
-                float threshold_display = using_fallback ? FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F : FAN_CONTROL_THRESHOLD_TEMP_F;
-                ESP_LOGI(TAG, "Fan: %s | %s Temp: %.1f°F | Threshold: %.1f°F",
-                         fan_state ? "ON" : "OFF",
-                         temp_source,
-                         current_temp,
-                         threshold_display);
-            } else {
-                ESP_LOGI(TAG, "Fan: %s | Temp: N/A | Threshold: N/A",
-                         fan_state ? "ON" : "OFF");
+            // Get One-Wire sensor status
+            uint8_t onewire_sensor_count = onewire_temp_manager_get_sensor_count();
+            uint8_t onewire_sensor_count_from_data = 0;
+            if (sensor_data.mutex != NULL) {
+                if (xSemaphoreTake(sensor_data.mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                    onewire_sensor_count_from_data = (uint8_t)genericSens_.generic.tempSensorcount;
+                    xSemaphoreGive(sensor_data.mutex);
+                }
+            }
+            
+            if (system_monitor_output_enabled) {
+                if (onewire_sensor_count > 0) {
+                    if (onewire_sensor_count == onewire_sensor_count_from_data) {
+                        ESP_LOGI(TAG, "One-Wire: Initialized | Sensors: %d", onewire_sensor_count);
+                    } else {
+                        ESP_LOGW(TAG, "One-Wire: Initialized | Sensors: %d (mismatch: manager=%d, data=%d)", 
+                                 onewire_sensor_count, onewire_sensor_count, onewire_sensor_count_from_data);
+                    }
+                } else {
+                    ESP_LOGI(TAG, "One-Wire: Initialized | Sensors: 0 (no sensors detected)");
+                }
             }
 
-            // Publish system monitor message to MQTT (every 5 seconds)
+            // Display fan control status and temperature
+            // Note: fan_state is tracked in a variable since gpio_get_level() doesn't work reliably for output pins
+            if (system_monitor_output_enabled) {
+                if (temp_valid) {
+                    const char* temp_source = using_fallback ? "Die" : "Ambient";
+                    float threshold_display = using_fallback ? FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F : FAN_CONTROL_THRESHOLD_TEMP_F;
+                    ESP_LOGI(TAG, "Fan: %s | %s Temp: %.1f°F | Threshold: %.1f°F",
+                             fan_state ? "ON" : "OFF",
+                             temp_source,
+                             current_temp,
+                             threshold_display);
+                } else {
+                    ESP_LOGI(TAG, "Fan: %s | Temp: N/A | Threshold: N/A",
+                             fan_state ? "ON" : "OFF");
+                }
+            }
+
+            // Publish system monitor message to MQTT (every 10 seconds)
             if (mqtt_connected && wifi_connected) {
                 cJSON *json = cJSON_CreateObject();
                 if (json != NULL) {
+                    // Firmware and build information (matches serial output)
+                    cJSON_AddStringToObject(json, "firmware_version", FIRMWARE_VERSION_STRING);
+                    cJSON_AddStringToObject(json, "build_date", __DATE__);
+                    cJSON_AddStringToObject(json, "build_time", __TIME__);
+                    
                     // System status
+                    char uptime_str[16];
+                    snprintf(uptime_str, sizeof(uptime_str), "%02lu:%02lu:%02lu", 
+                             uptimeHours, uptimeMinutes, uptimeSecs);
+                    cJSON_AddStringToObject(json, "uptime", uptime_str);
                     cJSON_AddNumberToObject(json, "uptime_sec", uptimeSeconds);
                     cJSON_AddNumberToObject(json, "free_heap", currentHeapFree);
                     cJSON_AddNumberToObject(json, "min_free_heap", minHeapFree);
                     cJSON_AddNumberToObject(json, "active_tasks", currentTaskCount);
+                    
+                    // Panic statistics (matches serial output)
+                    PanicStats_t panic_stats;
+                    if (panic_stats_get(&panic_stats) == ESP_OK) {
+                        cJSON_AddNumberToObject(json, "panic_count", panic_stats.total_panic_count);
+                        cJSON_AddNumberToObject(json, "panic_count_since_clean", panic_stats.panics_since_clean);
+                        cJSON_AddStringToObject(json, "last_reset_reason", 
+                                               panic_stats_get_reset_reason_string(panic_stats.last_reset_reason));
+                        if (panic_stats.last_panic_timestamp > 0) {
+                            cJSON_AddNumberToObject(json, "last_panic_timestamp_ms", panic_stats.last_panic_timestamp);
+                        }
+                    }
+                    
+                    // Calculate idle time percentage (matches serial output)
+                    float idle_percentage = 0.0f;
+                    UBaseType_t num_tasks = uxTaskGetNumberOfTasks();
+                    if (num_tasks > 0) {
+                        // Use static buffer to avoid stack overflow (max reasonable task count: 32)
+                        static TaskStatus_t task_status_array[32];
+                        uint32_t total_runtime = 0;
+                        UBaseType_t num_tasks_found = uxTaskGetSystemState(
+                            task_status_array,
+                            (num_tasks < 32) ? num_tasks : 32,
+                            &total_runtime
+                        );
+                        
+                        if (total_runtime > 0 && num_tasks_found > 0) {
+                            // Find idle task(s) - ESP32-C6 has single core, so typically "IDLE" or "IDLE0"
+                            uint32_t idle_runtime = 0;
+                            for (UBaseType_t i = 0; i < num_tasks_found; i++) {
+                                const char* task_name = task_status_array[i].pcTaskName;
+                                if (task_name != NULL && 
+                                    (strcmp(task_name, "IDLE") == 0 || 
+                                     strcmp(task_name, "IDLE0") == 0 ||
+                                     strncmp(task_name, "IDLE", 4) == 0)) {
+                                    idle_runtime += task_status_array[i].ulRunTimeCounter;
+                                }
+                            }
+                            
+                            // Calculate idle percentage
+                            idle_percentage = (idle_runtime * 100.0f) / total_runtime;
+                        }
+                    }
+                    cJSON_AddNumberToObject(json, "idle_time_percent", idle_percentage);
                     
                     // WiFi status
                     if (wifi_connected) {
@@ -694,6 +805,28 @@ void vSystemMonitorTask(void *pvParameters) {
                         }
                     }
                     
+                    // One-Wire sensors
+                    uint8_t onewire_sensor_count = onewire_temp_manager_get_sensor_count();
+                    uint8_t onewire_sensor_count_from_data = 0;
+                    if (sensor_data.mutex != NULL) {
+                        if (xSemaphoreTake(sensor_data.mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                            onewire_sensor_count_from_data = (uint8_t)genericSens_.generic.tempSensorcount;
+                            xSemaphoreGive(sensor_data.mutex);
+                        }
+                    }
+                    
+                    cJSON *onewire_json = cJSON_CreateObject();
+                    if (onewire_json != NULL) {
+                        cJSON_AddNumberToObject(onewire_json, "sensor_count", onewire_sensor_count);
+                        cJSON_AddNumberToObject(onewire_json, "sensor_count_from_data", onewire_sensor_count_from_data);
+                        if (onewire_sensor_count > 0) {
+                            cJSON_AddStringToObject(onewire_json, "status", "initialized");
+                        } else {
+                            cJSON_AddStringToObject(onewire_json, "status", "no_sensors");
+                        }
+                        cJSON_AddItemToObject(json, "onewire", onewire_json);
+                    }
+                    
                     // Fan control status
                     cJSON *fan_json = cJSON_CreateObject();
                     if (fan_json != NULL) {
@@ -769,8 +902,50 @@ void vSystemMonitorTask(void *pvParameters) {
         // Send heartbeat to watchdog
         watchdog_task_heartbeat();
 
+        // Calculate and display idle time percentage
         if (log_counter == 0) {
-            ESP_LOGI(TAG, "--- Monitor Complete ---");
+            // Check production gate for system monitor output
+            bool system_monitor_output_enabled = true;
+#if PRODUCTION_MODE
+            system_monitor_output_enabled = (ENABLE_SYSTEM_MONITOR_OUTPUT == 1);
+#else
+            system_monitor_output_enabled = true;  // Always enabled in development mode
+#endif
+
+            if (system_monitor_output_enabled) {
+                // Get task system state to calculate idle time percentage
+                UBaseType_t num_tasks = uxTaskGetNumberOfTasks();
+                if (num_tasks > 0) {
+                    // Use static buffer to avoid stack overflow (max reasonable task count: 32)
+                    static TaskStatus_t task_status_array[32];
+                    uint32_t total_runtime = 0;
+                    UBaseType_t num_tasks_found = uxTaskGetSystemState(
+                        task_status_array,
+                        (num_tasks < 32) ? num_tasks : 32,
+                        &total_runtime
+                    );
+                    
+                    if (total_runtime > 0 && num_tasks_found > 0) {
+                        // Find idle task(s) - ESP32-C6 has single core, so typically "IDLE" or "IDLE0"
+                        uint32_t idle_runtime = 0;
+                        for (UBaseType_t i = 0; i < num_tasks_found; i++) {
+                            const char* task_name = task_status_array[i].pcTaskName;
+                            if (task_name != NULL && 
+                                (strcmp(task_name, "IDLE") == 0 || 
+                                 strcmp(task_name, "IDLE0") == 0 ||
+                                 strncmp(task_name, "IDLE", 4) == 0)) {
+                                idle_runtime += task_status_array[i].ulRunTimeCounter;
+                            }
+                        }
+                        
+                        // Calculate idle percentage
+                        float idle_percentage = (idle_runtime * 100.0f) / total_runtime;
+                        ESP_LOGI(TAG, "Idle Time: %.1f%%", idle_percentage);
+                    }
+                }
+                
+                ESP_LOGI(TAG, "--- Monitor Complete ---");
+            }
         }
 
         // Wait for next monitoring interval
