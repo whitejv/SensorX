@@ -28,8 +28,12 @@
 #include "wifi_manager.h"
 #include "sensor.h"
 #include "sensor_coordination.h"
+#include "json_constants.h"
 
 static const char *TAG = "MQTT_PUBLISHER";
+
+// Static JSON serialization buffer (reduces malloc/free overhead)
+static char json_string_buffer[JSON_BUFFER_SIZE];
 
 // Task handle is defined in system_init.c, declared extern in mqtt_publisher.h
 
@@ -116,16 +120,16 @@ void vMqttPublisherTask(void *pvParameters) {
                         GENERICSENS_EXTRACT_FLOWDATA(local_copy.generic.flowData2, flow2);
                         GENERICSENS_EXTRACT_FLOWDATA(local_copy.generic.flowData3, flow3);
                         
-                        // Flow sensors (bit-packed, extract individual fields)
-                        cJSON_AddNumberToObject(json, "S005D:flow1_pulses", flow1.pulses);
-                        cJSON_AddNumberToObject(json, "S005D:flow1_ms", flow1.milliseconds);
-                        cJSON_AddNumberToObject(json, "S005D:flow1_newData", flow1.newData);
-                        cJSON_AddNumberToObject(json, "S005D:flow2_pulses", flow2.pulses);
-                        cJSON_AddNumberToObject(json, "S005D:flow2_ms", flow2.milliseconds);
-                        cJSON_AddNumberToObject(json, "S005D:flow2_newData", flow2.newData);
-                        cJSON_AddNumberToObject(json, "S005D:flow3_pulses", flow3.pulses);
-                        cJSON_AddNumberToObject(json, "S005D:flow3_ms", flow3.milliseconds);
-                        cJSON_AddNumberToObject(json, "S005D:flow3_newData", flow3.newData);
+                        // Flow sensors (bit-packed, extract individual fields) - using static strings
+                        cJSON_AddNumberToObject(json, JSON_KEY_FLOW1_PULSES, flow1.pulses);
+                        cJSON_AddNumberToObject(json, JSON_KEY_FLOW1_MS, flow1.milliseconds);
+                        cJSON_AddNumberToObject(json, JSON_KEY_FLOW1_NEWDATA, flow1.newData);
+                        cJSON_AddNumberToObject(json, JSON_KEY_FLOW2_PULSES, flow2.pulses);
+                        cJSON_AddNumberToObject(json, JSON_KEY_FLOW2_MS, flow2.milliseconds);
+                        cJSON_AddNumberToObject(json, JSON_KEY_FLOW2_NEWDATA, flow2.newData);
+                        cJSON_AddNumberToObject(json, JSON_KEY_FLOW3_PULSES, flow3.pulses);
+                        cJSON_AddNumberToObject(json, JSON_KEY_FLOW3_MS, flow3.milliseconds);
+                        cJSON_AddNumberToObject(json, JSON_KEY_FLOW3_NEWDATA, flow3.newData);
                         
                         // Integer fields (words 3-11) - use variable names array
                         cJSON_AddNumberToObject(json, genericsens_ClientData_var_name[3], local_copy.generic.adc_sensor);
@@ -154,8 +158,8 @@ void vMqttPublisherTask(void *pvParameters) {
                         cJSON_AddNumberToObject(json, genericsens_ClientData_var_name[24], local_copy.generic.temp3);
                         cJSON_AddNumberToObject(json, genericsens_ClientData_var_name[25], local_copy.generic.temp4);
                         
-                        // Add timestamp
-                        cJSON_AddNumberToObject(json, "timestamp", xTaskGetTickCount() * portTICK_PERIOD_MS);
+                        // Add timestamp - using static string
+                        cJSON_AddNumberToObject(json, JSON_KEY_TIMESTAMP, xTaskGetTickCount() * portTICK_PERIOD_MS);
                         
                         // Check timeout before serialization (most expensive operation)
                         TickType_t json_elapsed = xTaskGetTickCount() - json_start_time;
@@ -163,13 +167,13 @@ void vMqttPublisherTask(void *pvParameters) {
                             // Send watchdog heartbeat before potentially long operation
                             watchdog_task_heartbeat();
                             
-                            // Serialize and publish (within time budget)
-                            // Note: cJSON_Print() is blocking and can't be interrupted
-                            char *json_string = cJSON_Print(json);
+                            // Serialize and publish (within time budget) - using static buffer
+                            // Note: cJSON_PrintPreallocated() is blocking and can't be interrupted
+                            int json_len = cJSON_PrintPreallocated(json, json_string_buffer, JSON_BUFFER_SIZE, false);
                             
                             // Check timeout immediately after serialization
                             json_elapsed = xTaskGetTickCount() - json_start_time;
-                            if (json_string != NULL) {
+                            if (json_len > 0 && json_len < JSON_BUFFER_SIZE) {
                                 // Send heartbeat before publish
                                 watchdog_task_heartbeat();
                                 
@@ -177,7 +181,7 @@ void vMqttPublisherTask(void *pvParameters) {
                                 if (json_elapsed < json_timeout) {
                                     esp_err_t json_ret = mqtt_manager_publish_json(
                                         MQTT_TOPIC_JSON_GENERICSENS,
-                                        json_string,
+                                        json_string_buffer,
                                         MQTT_JSON_QOS,  // QoS 0 for viewing
                                         false
                                     );
@@ -191,8 +195,9 @@ void vMqttPublisherTask(void *pvParameters) {
                                     ESP_LOGW(TAG, "JSON timeout before publish (took %lu ms) - aborting", 
                                              json_elapsed * portTICK_PERIOD_MS);
                                 }
-                                
-                                free(json_string);
+                            } else if (json_len >= JSON_BUFFER_SIZE) {
+                                ESP_LOGE(TAG, "JSON buffer overflow (needed %d bytes, buffer is %d bytes)", 
+                                         json_len, JSON_BUFFER_SIZE);
                             } else {
                                 ESP_LOGE(TAG, "Failed to serialize JSON");
                             }

@@ -33,8 +33,23 @@
 #include "sensor.h"
 #include "onewire_temp_manager.h"
 #include "panic_stats.h"
+#include "json_constants.h"
 
 static const char *TAG = "SYSTEM_INIT";
+
+// Static JSON serialization buffer (reduces malloc/free overhead)
+static char system_monitor_json_buffer[JSON_BUFFER_SIZE];
+
+// Pre-built JSON templates for nested objects (reduces allocation overhead)
+static cJSON* g_firmware_info_json = NULL;
+static cJSON* g_wifi_json_template = NULL;
+static cJSON* g_mqtt_json_template = NULL;
+static cJSON* g_i2c_json_template = NULL;
+static cJSON* g_onewire_json_template = NULL;
+static cJSON* g_fan_json_template = NULL;
+static cJSON* g_watchdog_json_template = NULL;
+static cJSON* g_error_json_template = NULL;
+static cJSON* g_i2c_errors_json_template = NULL;
 
 // Task handles for heartbeat, information, and monitoring tasks
 TaskHandle_t xHeartbeatTaskHandle = NULL;
@@ -230,6 +245,84 @@ static void print_sensor_data_verbose(void) {
 }
 #endif // VERBOSE
 
+/**
+ * @brief Initialize JSON templates for system monitor messages.
+ * Creates reusable JSON objects to reduce allocation overhead.
+ */
+static void init_json_templates(void) {
+    // Firmware info template (static data, never changes)
+    g_firmware_info_json = cJSON_CreateObject();
+    if (g_firmware_info_json != NULL) {
+        cJSON_AddStringToObject(g_firmware_info_json, JSON_KEY_FIRMWARE_VERSION, FIRMWARE_VERSION_STRING);
+        cJSON_AddStringToObject(g_firmware_info_json, JSON_KEY_BUILD_DATE, __DATE__);
+        cJSON_AddStringToObject(g_firmware_info_json, JSON_KEY_BUILD_TIME, __TIME__);
+    }
+    
+    // WiFi template (minimal structure, values updated each cycle)
+    g_wifi_json_template = cJSON_CreateObject();
+    if (g_wifi_json_template != NULL) {
+        cJSON_AddStringToObject(g_wifi_json_template, JSON_KEY_WIFI_STATUS, JSON_STATUS_DISCONNECTED);
+    }
+    
+    // MQTT template
+    g_mqtt_json_template = cJSON_CreateObject();
+    if (g_mqtt_json_template != NULL) {
+        cJSON_AddStringToObject(g_mqtt_json_template, JSON_KEY_MQTT_STATUS, JSON_STATUS_DISCONNECTED);
+    }
+    
+    // I2C template
+    g_i2c_json_template = cJSON_CreateObject();
+    if (g_i2c_json_template != NULL) {
+        cJSON_AddNumberToObject(g_i2c_json_template, JSON_KEY_I2C_DEVICE_COUNT, 0);
+        cJSON_AddStringToObject(g_i2c_json_template, JSON_KEY_I2C_STATUS, JSON_STATUS_INITIALIZED);
+    }
+    
+    // I2C errors template
+    g_i2c_errors_json_template = cJSON_CreateObject();
+    if (g_i2c_errors_json_template != NULL) {
+        cJSON_AddNumberToObject(g_i2c_errors_json_template, JSON_KEY_I2C_ERRORS_TOTAL, 0);
+        cJSON_AddNumberToObject(g_i2c_errors_json_template, JSON_KEY_I2C_ERRORS_TIMEOUTS, 0);
+        cJSON_AddNumberToObject(g_i2c_errors_json_template, JSON_KEY_I2C_ERRORS_NACKS, 0);
+        cJSON_AddNumberToObject(g_i2c_errors_json_template, JSON_KEY_I2C_ERRORS_BUS, 0);
+        cJSON_AddNumberToObject(g_i2c_errors_json_template, JSON_KEY_I2C_ERRORS_DEVICE_NOT_FOUND, 0);
+        cJSON_AddNumberToObject(g_i2c_errors_json_template, JSON_KEY_I2C_ERRORS_TX_FAILURES, 0);
+        cJSON_AddNumberToObject(g_i2c_errors_json_template, JSON_KEY_I2C_ERRORS_LAST_TIME_MS, 0);
+    }
+    
+    // One-Wire template
+    g_onewire_json_template = cJSON_CreateObject();
+    if (g_onewire_json_template != NULL) {
+        cJSON_AddNumberToObject(g_onewire_json_template, JSON_KEY_ONEWIRE_SENSOR_COUNT, 0);
+        cJSON_AddNumberToObject(g_onewire_json_template, JSON_KEY_ONEWIRE_SENSOR_COUNT_DATA, 0);
+        cJSON_AddStringToObject(g_onewire_json_template, JSON_KEY_ONEWIRE_STATUS, JSON_STATUS_NO_SENSORS);
+    }
+    
+    // Fan template
+    g_fan_json_template = cJSON_CreateObject();
+    if (g_fan_json_template != NULL) {
+        cJSON_AddBoolToObject(g_fan_json_template, JSON_KEY_FAN_ON, false);
+        cJSON_AddStringToObject(g_fan_json_template, JSON_KEY_FAN_TEMP_SOURCE, "none");
+    }
+    
+    // Error recovery template
+    g_error_json_template = cJSON_CreateObject();
+    if (g_error_json_template != NULL) {
+        cJSON_AddNumberToObject(g_error_json_template, JSON_KEY_ERRORS_TOTAL, 0);
+        cJSON_AddNumberToObject(g_error_json_template, JSON_KEY_ERRORS_RECOVERED, 0);
+        cJSON_AddNumberToObject(g_error_json_template, JSON_KEY_ERRORS_CRITICAL, 0);
+    }
+    
+    // Watchdog template
+    g_watchdog_json_template = cJSON_CreateObject();
+    if (g_watchdog_json_template != NULL) {
+        cJSON_AddNumberToObject(g_watchdog_json_template, JSON_KEY_WATCHDOG_TOTAL_FEEDS, 0);
+        cJSON_AddNumberToObject(g_watchdog_json_template, JSON_KEY_WATCHDOG_TIMEOUTS, 0);
+        cJSON_AddNumberToObject(g_watchdog_json_template, JSON_KEY_WATCHDOG_TASKS_MONITORED, 0);
+    }
+    
+    ESP_LOGI(TAG, "JSON templates initialized");
+}
+
 void vSystemMonitorTask(void *pvParameters) {
     (void)pvParameters;  // Unused parameter
 
@@ -278,6 +371,9 @@ void vSystemMonitorTask(void *pvParameters) {
     static bool no_temp_warning_logged = false;  // Track if "no temp source" warning was logged
 
     if (!initialized) {
+        // Initialize JSON templates once
+        init_json_templates();
+        
         startTime = xTaskGetTickCount() * portTICK_PERIOD_MS;
         lastHeapFree = esp_get_free_heap_size();
         minHeapFree = esp_get_free_heap_size();
@@ -657,30 +753,40 @@ void vSystemMonitorTask(void *pvParameters) {
             if (mqtt_connected && wifi_connected) {
                 cJSON *json = cJSON_CreateObject();
                 if (json != NULL) {
-                    // Firmware and build information (matches serial output)
-                    cJSON_AddStringToObject(json, "firmware_version", FIRMWARE_VERSION_STRING);
-                    cJSON_AddStringToObject(json, "build_date", __DATE__);
-                    cJSON_AddStringToObject(json, "build_time", __TIME__);
+                    // Firmware and build information (matches serial output) - use pre-built template
+                    if (g_firmware_info_json != NULL) {
+                        cJSON_AddItemReferenceToObject(json, JSON_KEY_FIRMWARE_VERSION, 
+                                                       cJSON_GetObjectItem(g_firmware_info_json, JSON_KEY_FIRMWARE_VERSION));
+                        cJSON_AddItemReferenceToObject(json, JSON_KEY_BUILD_DATE, 
+                                                       cJSON_GetObjectItem(g_firmware_info_json, JSON_KEY_BUILD_DATE));
+                        cJSON_AddItemReferenceToObject(json, JSON_KEY_BUILD_TIME, 
+                                                       cJSON_GetObjectItem(g_firmware_info_json, JSON_KEY_BUILD_TIME));
+                    } else {
+                        // Fallback if template not initialized
+                        cJSON_AddStringToObject(json, JSON_KEY_FIRMWARE_VERSION, FIRMWARE_VERSION_STRING);
+                        cJSON_AddStringToObject(json, JSON_KEY_BUILD_DATE, __DATE__);
+                        cJSON_AddStringToObject(json, JSON_KEY_BUILD_TIME, __TIME__);
+                    }
                     
-                    // System status
+                    // System status - using static strings
                     char uptime_str[16];
                     snprintf(uptime_str, sizeof(uptime_str), "%02lu:%02lu:%02lu", 
                              uptimeHours, uptimeMinutes, uptimeSecs);
-                    cJSON_AddStringToObject(json, "uptime", uptime_str);
-                    cJSON_AddNumberToObject(json, "uptime_sec", uptimeSeconds);
-                    cJSON_AddNumberToObject(json, "free_heap", currentHeapFree);
-                    cJSON_AddNumberToObject(json, "min_free_heap", minHeapFree);
-                    cJSON_AddNumberToObject(json, "active_tasks", currentTaskCount);
+                    cJSON_AddStringToObject(json, JSON_KEY_UPTIME, uptime_str);
+                    cJSON_AddNumberToObject(json, JSON_KEY_UPTIME_SEC, uptimeSeconds);
+                    cJSON_AddNumberToObject(json, JSON_KEY_FREE_HEAP, currentHeapFree);
+                    cJSON_AddNumberToObject(json, JSON_KEY_MIN_FREE_HEAP, minHeapFree);
+                    cJSON_AddNumberToObject(json, JSON_KEY_ACTIVE_TASKS, currentTaskCount);
                     
-                    // Panic statistics (matches serial output)
+                    // Panic statistics (matches serial output) - using static strings
                     PanicStats_t panic_stats;
                     if (panic_stats_get(&panic_stats) == ESP_OK) {
-                        cJSON_AddNumberToObject(json, "panic_count", panic_stats.total_panic_count);
-                        cJSON_AddNumberToObject(json, "panic_count_since_clean", panic_stats.panics_since_clean);
-                        cJSON_AddStringToObject(json, "last_reset_reason", 
+                        cJSON_AddNumberToObject(json, JSON_KEY_PANIC_COUNT, panic_stats.total_panic_count);
+                        cJSON_AddNumberToObject(json, JSON_KEY_PANIC_COUNT_CLEAN, panic_stats.panics_since_clean);
+                        cJSON_AddStringToObject(json, JSON_KEY_LAST_RESET_REASON, 
                                                panic_stats_get_reset_reason_string(panic_stats.last_reset_reason));
                         if (panic_stats.last_panic_timestamp > 0) {
-                            cJSON_AddNumberToObject(json, "last_panic_timestamp_ms", panic_stats.last_panic_timestamp);
+                            cJSON_AddNumberToObject(json, JSON_KEY_LAST_PANIC_TIMESTAMP_MS, panic_stats.last_panic_timestamp);
                         }
                     }
                     
@@ -714,61 +820,72 @@ void vSystemMonitorTask(void *pvParameters) {
                             idle_percentage = (idle_runtime * 100.0f) / total_runtime;
                         }
                     }
-                    cJSON_AddNumberToObject(json, "idle_time_percent", idle_percentage);
+                    cJSON_AddNumberToObject(json, JSON_KEY_IDLE_TIME_PERCENT, idle_percentage);
                     
-                    // WiFi status
-                    if (wifi_connected) {
-                        char ip_str[16];
-                        int8_t rssi = wifi_manager_get_rssi();
-                        WiFiStats_t wifi_stats;
-                        wifi_manager_get_stats(&wifi_stats);
-                        
-                        cJSON *wifi_json = cJSON_CreateObject();
-                        if (wifi_json != NULL) {
+                    // WiFi status - using template
+                    cJSON *wifi_json = NULL;
+                    if (g_wifi_json_template != NULL) {
+                        wifi_json = cJSON_Duplicate(g_wifi_json_template, 1);
+                    } else {
+                        wifi_json = cJSON_CreateObject();
+                    }
+                    if (wifi_json != NULL) {
+                        if (wifi_connected) {
+                            char ip_str[16];
+                            int8_t rssi = wifi_manager_get_rssi();
+                            WiFiStats_t wifi_stats;
+                            wifi_manager_get_stats(&wifi_stats);
+                            
                             if (wifi_manager_get_ip_address(ip_str, sizeof(ip_str)) == ESP_OK) {
-                                cJSON_AddStringToObject(wifi_json, "ip", ip_str);
+                                cJSON_AddStringToObject(wifi_json, JSON_KEY_WIFI_IP, ip_str);
                             }
-                            cJSON_AddNumberToObject(wifi_json, "rssi", rssi);
-                            cJSON_AddNumberToObject(wifi_json, "uptime_sec", wifi_stats.uptime);
-                            cJSON_AddStringToObject(wifi_json, "status", "connected");
-                            cJSON_AddItemToObject(json, "wifi", wifi_json);
+                            cJSON_AddNumberToObject(wifi_json, JSON_KEY_WIFI_RSSI, rssi);
+                            cJSON_AddNumberToObject(wifi_json, JSON_KEY_WIFI_UPTIME_SEC, wifi_stats.uptime);
+                            cJSON_SetValuestring(cJSON_GetObjectItem(wifi_json, JSON_KEY_WIFI_STATUS), JSON_STATUS_CONNECTED);
+                        } else {
+                            cJSON_SetValuestring(cJSON_GetObjectItem(wifi_json, JSON_KEY_WIFI_STATUS), JSON_STATUS_DISCONNECTED);
                         }
-                    } else {
-                        cJSON *wifi_json = cJSON_CreateObject();
-                        if (wifi_json != NULL) {
-                            cJSON_AddStringToObject(wifi_json, "status", "disconnected");
-                            cJSON_AddItemToObject(json, "wifi", wifi_json);
-                        }
+                        cJSON_AddItemToObject(json, "wifi", wifi_json);
                     }
                     
-                    // MQTT status
-                    if (mqtt_connected) {
-                        char mqtt_ip[16];
-                        MQTTStats_t mqtt_stats;
-                        mqtt_manager_get_stats(&mqtt_stats);
-                        
-                        cJSON *mqtt_json = cJSON_CreateObject();
-                        if (mqtt_json != NULL) {
+                    // MQTT status - using template
+                    cJSON *mqtt_json = NULL;
+                    if (g_mqtt_json_template != NULL) {
+                        mqtt_json = cJSON_Duplicate(g_mqtt_json_template, 1);
+                    } else {
+                        mqtt_json = cJSON_CreateObject();
+                    }
+                    if (mqtt_json != NULL) {
+                        if (mqtt_connected) {
+                            char mqtt_ip[16];
+                            MQTTStats_t mqtt_stats;
+                            mqtt_manager_get_stats(&mqtt_stats);
+                            
                             if (mqtt_manager_get_broker_ip(mqtt_ip, sizeof(mqtt_ip)) == ESP_OK) {
-                                cJSON_AddStringToObject(mqtt_json, "broker_ip", mqtt_ip);
+                                cJSON_AddStringToObject(mqtt_json, JSON_KEY_MQTT_BROKER_IP, mqtt_ip);
                             }
-                            cJSON_AddBoolToObject(mqtt_json, "connected_to_prod", mqtt_stats.connectedToProd);
-                            cJSON_AddNumberToObject(mqtt_json, "publish_success", mqtt_stats.publishSuccess);
-                            cJSON_AddNumberToObject(mqtt_json, "publish_failures", mqtt_stats.publishFailures);
-                            cJSON_AddStringToObject(mqtt_json, "status", "connected");
-                            cJSON_AddItemToObject(json, "mqtt", mqtt_json);
+                            cJSON_AddBoolToObject(mqtt_json, JSON_KEY_MQTT_CONNECTED_TO_PROD, mqtt_stats.connectedToProd);
+                            cJSON_AddNumberToObject(mqtt_json, JSON_KEY_MQTT_PUBLISH_SUCCESS, mqtt_stats.publishSuccess);
+                            cJSON_AddNumberToObject(mqtt_json, JSON_KEY_MQTT_PUBLISH_FAILURES, mqtt_stats.publishFailures);
+                            // Update status string
+                            cJSON_DeleteItemFromObject(mqtt_json, JSON_KEY_MQTT_STATUS);
+                            cJSON_AddStringToObject(mqtt_json, JSON_KEY_MQTT_STATUS, JSON_STATUS_CONNECTED);
+                        } else {
+                            // Update status string
+                            cJSON_DeleteItemFromObject(mqtt_json, JSON_KEY_MQTT_STATUS);
+                            cJSON_AddStringToObject(mqtt_json, JSON_KEY_MQTT_STATUS, JSON_STATUS_DISCONNECTED);
                         }
-                    } else {
-                        cJSON *mqtt_json = cJSON_CreateObject();
-                        if (mqtt_json != NULL) {
-                            cJSON_AddStringToObject(mqtt_json, "status", "disconnected");
-                            cJSON_AddItemToObject(json, "mqtt", mqtt_json);
-                        }
+                        cJSON_AddItemToObject(json, "mqtt", mqtt_json);
                     }
                     
-                    // I2C devices
+                    // I2C devices - using template
                     if (i2c_manager_is_initialized()) {
-                        cJSON *i2c_json = cJSON_CreateObject();
+                        cJSON *i2c_json = NULL;
+                        if (g_i2c_json_template != NULL) {
+                            i2c_json = cJSON_Duplicate(g_i2c_json_template, 1);
+                        } else {
+                            i2c_json = cJSON_CreateObject();
+                        }
                         if (i2c_json != NULL) {
                             if (cached_device_count > 0) {
                                 cJSON *devices_array = cJSON_CreateArray();
@@ -776,27 +893,46 @@ void vSystemMonitorTask(void *pvParameters) {
                                     for (size_t i = 0; i < cached_device_count; i++) {
                                         cJSON_AddItemToArray(devices_array, cJSON_CreateNumber(cached_i2c_addresses[i]));
                                     }
-                                    cJSON_AddNumberToObject(i2c_json, "device_count", cached_device_count);
-                                    cJSON_AddItemToObject(i2c_json, "devices", devices_array);
+                                    // Update device count
+                                    cJSON_DeleteItemFromObject(i2c_json, JSON_KEY_I2C_DEVICE_COUNT);
+                                    cJSON_AddNumberToObject(i2c_json, JSON_KEY_I2C_DEVICE_COUNT, cached_device_count);
+                                    cJSON_AddItemToObject(i2c_json, JSON_KEY_I2C_DEVICES, devices_array);
                                 }
                             } else {
-                                cJSON_AddNumberToObject(i2c_json, "device_count", 0);
+                                // Update device count
+                                cJSON_DeleteItemFromObject(i2c_json, JSON_KEY_I2C_DEVICE_COUNT);
+                                cJSON_AddNumberToObject(i2c_json, JSON_KEY_I2C_DEVICE_COUNT, 0);
                             }
-                            cJSON_AddStringToObject(i2c_json, "status", "initialized");
+                            // Update status string
+                            cJSON_DeleteItemFromObject(i2c_json, JSON_KEY_I2C_STATUS);
+                            cJSON_AddStringToObject(i2c_json, JSON_KEY_I2C_STATUS, JSON_STATUS_INITIALIZED);
                             
-                            // Add I2C error statistics
+                            // Add I2C error statistics - using template
                             I2CStats_t i2c_stats;
                             i2c_manager_get_stats(&i2c_stats);
                             if (i2c_stats.total_errors > 0) {
-                                cJSON *i2c_errors_json = cJSON_CreateObject();
+                                cJSON *i2c_errors_json = NULL;
+                                if (g_i2c_errors_json_template != NULL) {
+                                    i2c_errors_json = cJSON_Duplicate(g_i2c_errors_json_template, 1);
+                                } else {
+                                    i2c_errors_json = cJSON_CreateObject();
+                                }
                                 if (i2c_errors_json != NULL) {
-                                    cJSON_AddNumberToObject(i2c_errors_json, "total", i2c_stats.total_errors);
-                                    cJSON_AddNumberToObject(i2c_errors_json, "timeouts", i2c_stats.timeout_errors);
-                                    cJSON_AddNumberToObject(i2c_errors_json, "nacks", i2c_stats.nack_errors);
-                                    cJSON_AddNumberToObject(i2c_errors_json, "bus_errors", i2c_stats.bus_errors);
-                                    cJSON_AddNumberToObject(i2c_errors_json, "device_not_found", i2c_stats.device_not_found);
-                                    cJSON_AddNumberToObject(i2c_errors_json, "transaction_failures", i2c_stats.transaction_failures);
-                                    cJSON_AddNumberToObject(i2c_errors_json, "last_error_time_ms", i2c_stats.last_error_time_ms);
+                                    // Update error values (delete and re-add to ensure correct values)
+                                    cJSON_DeleteItemFromObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_TOTAL);
+                                    cJSON_AddNumberToObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_TOTAL, i2c_stats.total_errors);
+                                    cJSON_DeleteItemFromObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_TIMEOUTS);
+                                    cJSON_AddNumberToObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_TIMEOUTS, i2c_stats.timeout_errors);
+                                    cJSON_DeleteItemFromObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_NACKS);
+                                    cJSON_AddNumberToObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_NACKS, i2c_stats.nack_errors);
+                                    cJSON_DeleteItemFromObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_BUS);
+                                    cJSON_AddNumberToObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_BUS, i2c_stats.bus_errors);
+                                    cJSON_DeleteItemFromObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_DEVICE_NOT_FOUND);
+                                    cJSON_AddNumberToObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_DEVICE_NOT_FOUND, i2c_stats.device_not_found);
+                                    cJSON_DeleteItemFromObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_TX_FAILURES);
+                                    cJSON_AddNumberToObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_TX_FAILURES, i2c_stats.transaction_failures);
+                                    cJSON_DeleteItemFromObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_LAST_TIME_MS);
+                                    cJSON_AddNumberToObject(i2c_errors_json, JSON_KEY_I2C_ERRORS_LAST_TIME_MS, i2c_stats.last_error_time_ms);
                                     cJSON_AddItemToObject(i2c_json, "errors", i2c_errors_json);
                                 }
                             }
@@ -805,7 +941,7 @@ void vSystemMonitorTask(void *pvParameters) {
                         }
                     }
                     
-                    // One-Wire sensors
+                    // One-Wire sensors - using template
                     uint8_t onewire_sensor_count = onewire_temp_manager_get_sensor_count();
                     uint8_t onewire_sensor_count_from_data = 0;
                     if (sensor_data.mutex != NULL) {
@@ -815,67 +951,107 @@ void vSystemMonitorTask(void *pvParameters) {
                         }
                     }
                     
-                    cJSON *onewire_json = cJSON_CreateObject();
+                    cJSON *onewire_json = NULL;
+                    if (g_onewire_json_template != NULL) {
+                        onewire_json = cJSON_Duplicate(g_onewire_json_template, 1);
+                    } else {
+                        onewire_json = cJSON_CreateObject();
+                    }
                     if (onewire_json != NULL) {
-                        cJSON_AddNumberToObject(onewire_json, "sensor_count", onewire_sensor_count);
-                        cJSON_AddNumberToObject(onewire_json, "sensor_count_from_data", onewire_sensor_count_from_data);
+                        // Update sensor counts
+                        cJSON_DeleteItemFromObject(onewire_json, JSON_KEY_ONEWIRE_SENSOR_COUNT);
+                        cJSON_AddNumberToObject(onewire_json, JSON_KEY_ONEWIRE_SENSOR_COUNT, onewire_sensor_count);
+                        cJSON_DeleteItemFromObject(onewire_json, JSON_KEY_ONEWIRE_SENSOR_COUNT_DATA);
+                        cJSON_AddNumberToObject(onewire_json, JSON_KEY_ONEWIRE_SENSOR_COUNT_DATA, onewire_sensor_count_from_data);
+                        // Update status string
+                        cJSON_DeleteItemFromObject(onewire_json, JSON_KEY_ONEWIRE_STATUS);
                         if (onewire_sensor_count > 0) {
-                            cJSON_AddStringToObject(onewire_json, "status", "initialized");
+                            cJSON_AddStringToObject(onewire_json, JSON_KEY_ONEWIRE_STATUS, JSON_STATUS_INITIALIZED);
                         } else {
-                            cJSON_AddStringToObject(onewire_json, "status", "no_sensors");
+                            cJSON_AddStringToObject(onewire_json, JSON_KEY_ONEWIRE_STATUS, JSON_STATUS_NO_SENSORS);
                         }
                         cJSON_AddItemToObject(json, "onewire", onewire_json);
                     }
                     
-                    // Fan control status
-                    cJSON *fan_json = cJSON_CreateObject();
+                    // Fan control status - using template
+                    cJSON *fan_json = NULL;
+                    if (g_fan_json_template != NULL) {
+                        fan_json = cJSON_Duplicate(g_fan_json_template, 1);
+                    } else {
+                        fan_json = cJSON_CreateObject();
+                    }
                     if (fan_json != NULL) {
-                        cJSON_AddBoolToObject(fan_json, "on", fan_state);
+                        // Update fan state (bool) - delete and re-add to ensure correct value
+                        cJSON_DeleteItemFromObject(fan_json, JSON_KEY_FAN_ON);
+                        cJSON_AddBoolToObject(fan_json, JSON_KEY_FAN_ON, fan_state);
                         if (temp_valid) {
-                            cJSON_AddNumberToObject(fan_json, "temp_f", current_temp);
-                            cJSON_AddStringToObject(fan_json, "temp_source", using_fallback ? "die" : "ambient");
+                            cJSON_AddNumberToObject(fan_json, JSON_KEY_FAN_TEMP_F, current_temp);
+                            // Update temp source string
+                            cJSON_DeleteItemFromObject(fan_json, JSON_KEY_FAN_TEMP_SOURCE);
+                            cJSON_AddStringToObject(fan_json, JSON_KEY_FAN_TEMP_SOURCE, 
+                                                   using_fallback ? "die" : "ambient");
                             float threshold_display = using_fallback ? FAN_CONTROL_FALLBACK_THRESHOLD_TEMP_F : FAN_CONTROL_THRESHOLD_TEMP_F;
-                            cJSON_AddNumberToObject(fan_json, "threshold_f", threshold_display);
+                            cJSON_AddNumberToObject(fan_json, JSON_KEY_FAN_THRESHOLD_F, threshold_display);
                         } else {
-                            cJSON_AddNullToObject(fan_json, "temp_f");
-                            cJSON_AddStringToObject(fan_json, "temp_source", "none");
+                            cJSON_AddNullToObject(fan_json, JSON_KEY_FAN_TEMP_F);
+                            // Update temp source string
+                            cJSON_DeleteItemFromObject(fan_json, JSON_KEY_FAN_TEMP_SOURCE);
+                            cJSON_AddStringToObject(fan_json, JSON_KEY_FAN_TEMP_SOURCE, "none");
                         }
                         cJSON_AddItemToObject(json, "fan", fan_json);
                     }
                     
-                    // Error statistics
+                    // Error statistics - using template
                     ErrorRecoveryStats_t error_stats;
                     error_recovery_get_stats(&error_stats);
                     if (error_stats.total_errors > 0) {
-                        cJSON *error_json = cJSON_CreateObject();
+                        cJSON *error_json = NULL;
+                        if (g_error_json_template != NULL) {
+                            error_json = cJSON_Duplicate(g_error_json_template, 1);
+                        } else {
+                            error_json = cJSON_CreateObject();
+                        }
                         if (error_json != NULL) {
-                            cJSON_AddNumberToObject(error_json, "total", error_stats.total_errors);
-                            cJSON_AddNumberToObject(error_json, "recovered", error_stats.recovered_errors);
-                            cJSON_AddNumberToObject(error_json, "critical", error_stats.critical_errors);
+                            // Update error values
+                            cJSON_DeleteItemFromObject(error_json, JSON_KEY_ERRORS_TOTAL);
+                            cJSON_AddNumberToObject(error_json, JSON_KEY_ERRORS_TOTAL, error_stats.total_errors);
+                            cJSON_DeleteItemFromObject(error_json, JSON_KEY_ERRORS_RECOVERED);
+                            cJSON_AddNumberToObject(error_json, JSON_KEY_ERRORS_RECOVERED, error_stats.recovered_errors);
+                            cJSON_DeleteItemFromObject(error_json, JSON_KEY_ERRORS_CRITICAL);
+                            cJSON_AddNumberToObject(error_json, JSON_KEY_ERRORS_CRITICAL, error_stats.critical_errors);
                             cJSON_AddItemToObject(json, "errors", error_json);
                         }
                     }
                     
-                    // Watchdog statistics
+                    // Watchdog statistics - using template
                     WatchdogStats_t wdt_stats;
                     watchdog_get_stats(&wdt_stats);
-                    cJSON *wdt_json = cJSON_CreateObject();
+                    cJSON *wdt_json = NULL;
+                    if (g_watchdog_json_template != NULL) {
+                        wdt_json = cJSON_Duplicate(g_watchdog_json_template, 1);
+                    } else {
+                        wdt_json = cJSON_CreateObject();
+                    }
                     if (wdt_json != NULL) {
-                        cJSON_AddNumberToObject(wdt_json, "total_feeds", wdt_stats.totalFeeds);
-                        cJSON_AddNumberToObject(wdt_json, "timeouts", wdt_stats.timeoutCount);
-                        cJSON_AddNumberToObject(wdt_json, "tasks_monitored", wdt_stats.tasksMonitored);
+                        // Update watchdog values
+                        cJSON_DeleteItemFromObject(wdt_json, JSON_KEY_WATCHDOG_TOTAL_FEEDS);
+                        cJSON_AddNumberToObject(wdt_json, JSON_KEY_WATCHDOG_TOTAL_FEEDS, wdt_stats.totalFeeds);
+                        cJSON_DeleteItemFromObject(wdt_json, JSON_KEY_WATCHDOG_TIMEOUTS);
+                        cJSON_AddNumberToObject(wdt_json, JSON_KEY_WATCHDOG_TIMEOUTS, wdt_stats.timeoutCount);
+                        cJSON_DeleteItemFromObject(wdt_json, JSON_KEY_WATCHDOG_TASKS_MONITORED);
+                        cJSON_AddNumberToObject(wdt_json, JSON_KEY_WATCHDOG_TASKS_MONITORED, wdt_stats.tasksMonitored);
                         cJSON_AddItemToObject(json, "watchdog", wdt_json);
                     }
                     
-                    // Add timestamp
-                    cJSON_AddNumberToObject(json, "timestamp", currentTime);
+                    // Add timestamp - using static string
+                    cJSON_AddNumberToObject(json, JSON_KEY_TIMESTAMP, currentTime);
                     
-                    // Serialize and publish
-                    char *json_string = cJSON_Print(json);
-                    if (json_string != NULL) {
+                    // Serialize and publish - using static buffer
+                    int json_len = cJSON_PrintPreallocated(json, system_monitor_json_buffer, JSON_BUFFER_SIZE, false);
+                    if (json_len > 0 && json_len < JSON_BUFFER_SIZE) {
                         esp_err_t ret = mqtt_manager_publish_json(
                             MQTT_TOPIC_SYSTEM_MONITOR,
-                            json_string,
+                            system_monitor_json_buffer,
                             MQTT_SYSTEM_MONITOR_QOS,
                             false
                         );
@@ -884,7 +1060,9 @@ void vSystemMonitorTask(void *pvParameters) {
                         } else {
                             ESP_LOGW(TAG, "Failed to publish system monitor message: %s", esp_err_to_name(ret));
                         }
-                        free(json_string);
+                    } else if (json_len >= JSON_BUFFER_SIZE) {
+                        ESP_LOGE(TAG, "System monitor JSON buffer overflow (needed %d bytes, buffer is %d bytes)", 
+                                 json_len, JSON_BUFFER_SIZE);
                     } else {
                         ESP_LOGE(TAG, "Failed to serialize system monitor JSON");
                     }

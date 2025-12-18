@@ -13,7 +13,7 @@
 #define FIRMWARE_VERSION_MAJOR    2
 #define FIRMWARE_VERSION_MINOR    1
 #define FIRMWARE_NAME             "SensorX ESP32"
-#define FIRMWARE_VERSION_STRING   "1.2"  // Firmware version string (major.minor)
+#define FIRMWARE_VERSION_STRING   "1.3"  // Firmware version string (major.minor)
 
 // FreeRTOS task priorities (higher number = higher priority in ESP-IDF)
 #define TASK_PRIORITY_CRITICAL    5    // Sensor acquisition, watchdog
@@ -41,6 +41,7 @@
 #define SERIAL_BUFFER_SIZE           256   // Serial input buffer
 #define LOG_MESSAGE_BUFFER_SIZE      512   // Log message buffer
 #define MQTT_BUFFER_SIZE             1024  // MQTT message buffer
+#define JSON_BUFFER_SIZE             2048  // Static JSON serialization buffer (reduces malloc/free overhead)
 
 // Sensor timing constants
 #define FLOW_SENSOR_TIMEOUT          2000  // Flow sensor measurement timeout
