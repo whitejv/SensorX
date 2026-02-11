@@ -2,8 +2,7 @@
 
 ** Multi-Sensor Data Acquisition System for ESP32-C6**
 
-MWPSensors is an ESP-IDF based sensor monitoring system designed for industrial and well monitoring applications. It collects data from multiple sensor types and publishes to MQTT brokers for remote monitoring and analysis.
-
+MWPSensors is a sensor monitoring system designed for industrial and well monitoring applications. It collects data from multiple sensor types and publishes to MQTT brokers for remote monitoring and analysis. It is created in the Essprif ESP-IDF based ecosystem.
 ---
 
 ## Hardware Platform
