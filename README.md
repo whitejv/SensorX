@@ -1,8 +1,8 @@
-# SensorX
+# MWPSensors (Was SensorX)
 
-**Multi-Sensor Data Acquisition System for ESP32-C6**
+** Multi-Sensor Data Acquisition System for ESP32-C6**
 
-SensorX is an ESP-IDF based sensor monitoring system designed for industrial and well monitoring applications. It collects data from multiple sensor types and publishes to MQTT brokers for remote monitoring and analysis.
+MWPSensors is an ESP-IDF based sensor monitoring system designed for industrial and well monitoring applications. It collects data from multiple sensor types and publishes to MQTT brokers for remote monitoring and analysis.
 
 ---
 
